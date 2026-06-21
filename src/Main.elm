@@ -286,11 +286,43 @@ fragmentShader =
         uniform float padding;
         uniform mat4 componentMatrix;
 
-        float linearToSRGB(float v) {
+        float linearRGBToSRGB(float v) {
             return
                 v <= 0.00313066844250063
                     ? v * 12.92
                     : 1.055 * pow(v, 1.0 / 2.4) - 0.055;
+        }
+
+        vec3 linearRGBToSRGB(vec3 linearRGB) {
+            return vec3(
+                linearRGBToSRGB(linearRGB.r),
+                linearRGBToSRGB(linearRGB.g),
+                linearRGBToSRGB(linearRGB.b)
+            );
+        }
+
+        vec3 labToLinearRGB(vec3 lab) {
+            mat3 labToLmsRoot = mat3(
+                1.0,           1.0,           1.0,
+                0.3963377774, -0.1055613458, -0.0894841775,
+                0.2158037573, -0.0638541728, -1.2914855480
+            );
+            vec3 lmsRoot = labToLmsRoot * lab;
+            vec3 lms = pow(lmsRoot, vec3(3.0));
+            mat3 lmsToLinearRGB = mat3(
+                 4.0767416621, -1.2684380046, -0.0041960863,
+                -3.3077115913,  2.6097574011, -0.7034186147,
+                 0.2309699292, -0.3413193965,  1.7076147010
+            );
+            return lmsToLinearRGB * lms;
+        }
+
+        vec3 oklchToLab(vec3 oklch) {
+            return vec3(
+                oklch.x,
+                oklch.y * cos(oklch.z * 6.28318531),
+                oklch.y * sin(oklch.z * 6.28318531)
+            );
         }
 
         void main () {
@@ -299,24 +331,12 @@ fragmentShader =
                 gl_FragColor = vec4(0,0,0,1);
             }
             else {
-                vec4 oklcha = componentMatrix * vec4(projected, 1, 1);
-                float l = oklcha.x;
-                float c = oklcha.y;
-                float h = oklcha.z;
-                float alpha = oklcha.w;
-                float a = c * cos(h * 6.28318531);
-                float b = c * sin(h * 6.28318531);
-                float lOut = pow(l + 0.3963377774 * a + 0.2158037573 * b, 3.0);
-                float m = pow(l - 0.1055613458 * a - 0.0638541728 * b, 3.0);
-                float s = pow(l - 0.0894841775 * a - 1.291485548 * b, 3.0);
-                float red = linearToSRGB(4.0767416621 * lOut - 3.3077115913 * m + 0.2309699292 * s);
-                float green = linearToSRGB(-1.2684380046 * lOut + 2.6097574011 * m - 0.3413193965 * s);
-                float blue = linearToSRGB(-0.0041960863 * lOut - 0.7034186147 * m + 1.707614701 * s);
-                if(red < 0. || red > 1. || green < 0. || green > 1. || blue < 0. || blue > 1.) {
-                    gl_FragColor = vec4(0,0,0,1);
-                } else {
-                    gl_FragColor = vec4(red, green, blue, alpha);
-                }
+                vec3 oklch = (componentMatrix * vec4(projected, 1, 1)).xyz;
+                vec3 lab = oklchToLab(oklch);
+                vec3 linearRGB = labToLinearRGB(lab);
+                vec3 sRGB = linearRGBToSRGB(linearRGB);
+                vec3 clamped = clamp(sRGB, 0., 1.);
+                gl_FragColor = (clamped == sRGB) ? vec4(sRGB, 1) : vec4(0,0,0,1);
             }
         }
     |]
