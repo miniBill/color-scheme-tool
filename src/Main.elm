@@ -198,6 +198,18 @@ viewSlice xComponent yComponent missingComponent palette =
                 ]
                 (axes ++ dots)
 
+        missingComponentAverage : Float
+        missingComponentAverage =
+            if List.isEmpty palette then
+                missingComponent.default
+
+            else
+                (palette
+                    |> List.map missingComponent.get
+                    |> List.sum
+                )
+                    / toFloat (List.length palette)
+
         webgl : Html msg
         webgl =
             WebGL.toHtml
@@ -213,7 +225,7 @@ viewSlice xComponent yComponent missingComponent palette =
                         Matrix4.makeBasis
                             (Vector3.scale xComponent.max xComponent.component)
                             (Vector3.scale yComponent.max yComponent.component)
-                            (Vector3.scale missingComponent.default missingComponent.component)
+                            (Vector3.scale missingComponentAverage missingComponent.component)
                     , innerHeight = innerHeight
                     , innerWidth = innerWidth
                     , padding = padding
@@ -308,15 +320,6 @@ fragmentShader =
             }
         }
     |]
-
-
-linearToSRGB v =
-    -- Higher precision constant from https://entropymine.com/imageworsener/srgbformula/
-    if v <= 0.00313066844250063 then
-        v * 12.92
-
-    else
-        1.055 * v ^ (1 / 2.4) - 0.055
 
 
 project : Float -> Float -> Float -> Float -> Float -> Float
