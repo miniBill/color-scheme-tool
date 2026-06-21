@@ -9,6 +9,7 @@ import Html exposing (Attribute, Html)
 import Html.Attributes
 import Html.Events
 import Round
+import Theme
 
 
 type alias Palette =
@@ -39,10 +40,52 @@ init =
 
 view : Model -> Html Msg
 view model =
-    Html.div
+    Theme.column
         [ Html.Attributes.style "padding" "8px" ]
-        [ viewPalettes model
+        [ Theme.wrappedRow
+            []
+            [ viewSlice l h model
+            , viewSlice c h model
+            , viewSlice l c model
+            ]
+        , viewPalettes model
         ]
+
+
+type alias Component =
+    { get : Oklch -> Float
+    , set : Float -> Oklch -> Oklch
+    , max : Float
+    }
+
+
+l : Component
+l =
+    { get = .lightness
+    , set = \new color -> { color | lightness = new }
+    , max = 1
+    }
+
+
+c : Component
+c =
+    { get = .chroma
+    , set = \new color -> { color | chroma = new }
+    , max = 0.37
+    }
+
+
+h : Component
+h =
+    { get = .hue
+    , set = \new color -> { color | hue = new }
+    , max = 1
+    }
+
+
+viewSlice : Component -> Component -> Palette -> Html Msg
+viewSlice xComponent yComponent palette =
+    Theme.box [] [ Html.text "TODO - viewSlice" ]
 
 
 viewPalettes : Model -> Html Msg
@@ -59,12 +102,7 @@ viewPalettes model =
             (\palette ->
                 viewPalette { selected = model == palette } palette
             )
-        |> Html.div
-            [ Html.Attributes.style "display" "flex"
-            , Html.Attributes.style "flex-wrap" "wrap"
-            , Html.Attributes.style "gap" "8px"
-            , Html.Attributes.style "align-items" "start"
-            ]
+        |> Theme.wrappedRow [ Html.Attributes.style "align-items" "start" ]
 
 
 viewPalette : { selected : Bool } -> Palette -> Html Msg
@@ -79,9 +117,6 @@ viewPalette { selected } colors =
             [ Html.Attributes.style "display" "grid"
             , Html.Attributes.style "gap" "8px 0"
             , Html.Events.onClick colors
-            , Html.Attributes.style "padding" "8px"
-            , Html.Attributes.style "border" "1px solid black"
-            , Html.Attributes.style "border-radius" "8px"
             ]
 
         selectionAttrs : List (Attribute Msg)
@@ -116,7 +151,7 @@ viewPalette { selected } colors =
     in
     colors
         |> List.concatMap (viewColor { selected = selected })
-        |> Html.div attrs
+        |> Theme.box attrs
 
 
 type GridAxis
@@ -164,12 +199,6 @@ gridTemplate axis others =
 viewColor : { selected : Bool } -> Oklch -> List (Html Msg)
 viewColor { selected } color =
     let
-        rgb : { red : Float, green : Float, blue : Float, alpha : Float }
-        rgb =
-            color
-                |> Oklch.toColor
-                |> Color.toRgba
-
         colorDiv : Html msg
         colorDiv =
             Html.div
@@ -181,6 +210,13 @@ viewColor { selected } color =
                 []
     in
     if selected then
+        let
+            rgb : { red : Float, green : Float, blue : Float, alpha : Float }
+            rgb =
+                color
+                    |> Oklch.toColor
+                    |> Color.toRgba
+        in
         [ colorDiv
         , Html.span
             [ Html.Attributes.style "grid-column" "oklch" ]
