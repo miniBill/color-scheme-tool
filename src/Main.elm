@@ -8,6 +8,7 @@ import FathersDay
 import Html exposing (Attribute, Html)
 import Html.Attributes
 import Html.Events
+import Json.Decode
 import List.Extra
 import Math.Matrix4 as Matrix4 exposing (Mat4)
 import Math.Vector2 exposing (Vec2)
@@ -16,6 +17,7 @@ import Round
 import Svg exposing (Svg)
 import Svg.Attributes
 import Theme
+import Triple.Extra
 import WebGL exposing (Mesh, Shader)
 
 
@@ -426,20 +428,92 @@ viewPalette { selected } palette =
                             |> List.map (Html.map (\newColor -> List.Extra.setAt i newColor palette))
                     )
                 |> List.concat
-    in
-    (if selected then
-        Html.button
-            [ Html.Attributes.style "grid-column"
-                ("1 / span " ++ String.fromInt (List.length columns))
-            , Html.Events.onClick (List.sortBy .hue palette)
-            ]
-            [ Html.text "Sort by hue" ]
-            :: children
 
-     else
-        children
-    )
-        |> Theme.box attrs
+        header : List (Html Palette)
+        header =
+            if selected then
+                let
+                    spanColumns : Attribute msg
+                    spanColumns =
+                        Html.Attributes.style "grid-column"
+                            ("1 / span " ++ String.fromInt (List.length columns))
+
+                    minDelta : List (Html Msg)
+                    minDelta =
+                        palette
+                            |> List.map Oklch.toOklab
+                            |> List.Extra.uniquePairs
+                            |> List.map
+                                (\( ca, cb ) ->
+                                    ( sqrt
+                                        (((ca.a - cb.a) ^ 2)
+                                            + ((ca.b - cb.b) ^ 2)
+                                            + ((ca.lightness - cb.lightness) ^ 2)
+                                        )
+                                    , ca
+                                    , cb
+                                    )
+                                )
+                            |> List.Extra.minimumBy Triple.Extra.first
+                            |> Maybe.map
+                                (\( delta, ca, cb ) ->
+                                    [ Html.text (Round.round 2 delta ++ " between ")
+                                    , colorDiv (Oklch.fromOklab ca)
+                                    , Html.text " and "
+                                    , colorDiv (Oklch.fromOklab cb)
+                                    ]
+                                )
+                            |> Maybe.withDefault [ Html.text "—" ]
+                in
+                [ Html.button
+                    [ spanColumns
+                    , Html.Events.stopPropagationOn "click" (Json.Decode.succeed ( List.sortBy .hue palette, True ))
+                    ]
+                    [ Html.text "Sort by hue" ]
+                , Html.div
+                    [ spanColumns
+                    , Html.Attributes.style "display" "grid"
+                    , Html.Attributes.style "grid-template-columns" "auto auto auto auto"
+                    ]
+                    (List.map
+                        (\label ->
+                            Html.span [ Html.Attributes.style "font-weight" "bold" ] [ Html.text label ]
+                        )
+                        [ "Component", "Min", "Max", "Range" ]
+                        ++ List.concatMap componentInfo [ l, c, h ]
+                    )
+                , Html.div
+                    [ spanColumns ]
+                    (Html.text "Min Δ in Lab: " :: minDelta)
+                ]
+
+            else
+                []
+
+        componentInfo : Component -> List (Html Msg)
+        componentInfo component =
+            let
+                list : List Float
+                list =
+                    List.map component.get palette
+
+                floatCell : Maybe Float -> Html Msg
+                floatCell v =
+                    v
+                        |> Maybe.map (Round.round 3)
+                        |> Maybe.withDefault "—"
+                        |> Html.text
+                        |> List.singleton
+                        |> Html.span []
+            in
+            [ Html.span [] [ Html.text component.label ]
+            , floatCell (List.minimum list)
+            , floatCell (List.maximum list)
+            , floatCell (Maybe.map2 (-) (List.maximum list) (List.minimum list))
+            ]
+    in
+    Theme.box attrs
+        (header ++ children)
 
 
 type GridAxis
@@ -486,17 +560,6 @@ gridTemplate axis others =
 
 viewColor : { selected : Bool } -> Oklch -> List (Html Oklch)
 viewColor { selected } color =
-    let
-        colorDiv : Html msg
-        colorDiv =
-            Html.div
-                [ Html.Attributes.style "background-color" (Oklch.toCssString color)
-                , Html.Attributes.style "grid-column" "color"
-                , Html.Attributes.style "width" "24px"
-                , Html.Attributes.style "height" "24px"
-                ]
-                []
-    in
     if selected then
         let
             rgb : { red : Float, green : Float, blue : Float, alpha : Float }
@@ -505,7 +568,7 @@ viewColor { selected } color =
                     |> Oklch.toColor
                     |> Color.toRgba
         in
-        [ colorDiv
+        [ colorDiv color
         , Html.span
             [ Html.Attributes.style "grid-column" "oklch" ]
             [ Html.text "oklch(" ]
@@ -541,11 +604,23 @@ viewColor { selected } color =
             [ Html.Attributes.style "grid-column" "b"
             , Html.Attributes.style "justify-self" "right"
             ]
-            [ Html.text (Round.round 0 (rgb.blue * 100) ++ "% ") ]
+            [ Html.text (Round.round 0 (rgb.blue * 100) ++ "%)") ]
         ]
 
     else
-        [ colorDiv ]
+        [ colorDiv color ]
+
+
+colorDiv : Oklch -> Html msg
+colorDiv color =
+    Html.div
+        [ Html.Attributes.style "background-color" (Oklch.toCssString color)
+        , Html.Attributes.style "grid-column" "color"
+        , Html.Attributes.style "width" "24px"
+        , Html.Attributes.style "height" "24px"
+        , Html.Attributes.style "display" "inline-block"
+        ]
+        []
 
 
 update : Msg -> Model -> Model
