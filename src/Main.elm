@@ -8,6 +8,7 @@ import FathersDay
 import Html exposing (Attribute, Html)
 import Html.Attributes
 import Html.Events
+import List.Extra
 import Math.Matrix4 as Matrix4 exposing (Mat4)
 import Math.Vector2 exposing (Vec2)
 import Math.Vector3 as Vector3 exposing (Vec3)
@@ -356,7 +357,12 @@ viewPalettes model =
                 |> List.sortBy List.length
                 |> List.map (List.map Oklch.fromColor)
     in
-    all
+    (if List.member model all then
+        all
+
+     else
+        model :: all
+    )
         |> List.map
             (\palette ->
                 viewPalette { selected = model == palette } palette
@@ -365,7 +371,7 @@ viewPalettes model =
 
 
 viewPalette : { selected : Bool } -> Palette -> Html Msg
-viewPalette { selected } colors =
+viewPalette { selected } palette =
     let
         attrs : List (Attribute Msg)
         attrs =
@@ -375,7 +381,7 @@ viewPalette { selected } colors =
         commonAttrs =
             [ Html.Attributes.style "display" "grid"
             , Html.Attributes.style "gap" "8px 0"
-            , Html.Events.onClick colors
+            , Html.Events.onClick palette
             ]
 
         selectionAttrs : List (Attribute Msg)
@@ -383,23 +389,7 @@ viewPalette { selected } colors =
             if selected then
                 [ Html.Attributes.style "box-shadow" "0px 0px 4px 4px #ccf"
                 , Html.Attributes.style "background" "#f0f0ff"
-                , gridTemplate Column
-                    [ ( [ "color" ], "24px" )
-                    , ( [], "8px" )
-                    , ( [ "oklch" ], "auto" )
-                    , ( [ "l" ], "auto" )
-                    , ( [], "8px" )
-                    , ( [ "c" ], "auto" )
-                    , ( [], "8px" )
-                    , ( [ "h" ], "auto" )
-                    , ( [], "16px" )
-                    , ( [ "rgb" ], "auto" )
-                    , ( [ "r" ], "auto" )
-                    , ( [], "8px" )
-                    , ( [ "g" ], "auto" )
-                    , ( [], "8px" )
-                    , ( [ "b" ], "auto" )
-                    ]
+                , gridTemplate Column columns
                 ]
 
             else
@@ -407,9 +397,48 @@ viewPalette { selected } colors =
                     [ ( [ "color" ], "24px" )
                     ]
                 ]
+
+        columns : List ( List String, String )
+        columns =
+            [ ( [ "color" ], "24px" )
+            , ( [], "8px" )
+            , ( [ "oklch" ], "auto" )
+            , ( [ "l" ], "auto" )
+            , ( [], "8px" )
+            , ( [ "c" ], "auto" )
+            , ( [], "8px" )
+            , ( [ "h" ], "auto" )
+            , ( [], "16px" )
+            , ( [ "rgb" ], "auto" )
+            , ( [ "r" ], "auto" )
+            , ( [], "8px" )
+            , ( [ "g" ], "auto" )
+            , ( [], "8px" )
+            , ( [ "b" ], "auto" )
+            ]
+
+        children : List (Html Msg)
+        children =
+            palette
+                |> List.indexedMap
+                    (\i color ->
+                        viewColor { selected = selected } color
+                            |> List.map (Html.map (\newColor -> List.Extra.setAt i newColor palette))
+                    )
+                |> List.concat
     in
-    colors
-        |> List.concatMap (viewColor { selected = selected })
+    (if selected then
+        Html.button
+            [ Html.Attributes.style "grid-column"
+                ("1 / span " ++ String.fromInt (List.length columns))
+            , Html.Events.onClick (List.sortBy .hue palette)
+            ]
+            [ Html.text "Sort by hue" ]
+            :: children
+
+     else
+        children
+    )
         |> Theme.box attrs
 
 
@@ -455,7 +484,7 @@ gridTemplate axis others =
     Html.Attributes.style ("grid-template-" ++ axisString) (String.join " " pieces)
 
 
-viewColor : { selected : Bool } -> Oklch -> List (Html Msg)
+viewColor : { selected : Bool } -> Oklch -> List (Html Oklch)
 viewColor { selected } color =
     let
         colorDiv : Html msg
