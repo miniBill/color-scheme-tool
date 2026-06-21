@@ -87,18 +87,12 @@ viewPalette { selected } colors =
         selectionAttrs : List (Attribute Msg)
         selectionAttrs =
             if selected then
-                [ Html.Attributes.style "box-shadow"
-                    "0px 0px 4px 4px #ccf"
-                , Html.Attributes.style "background"
-                    "#f0f0ff"
+                [ Html.Attributes.style "box-shadow" "0px 0px 4px 4px #ccf"
+                , Html.Attributes.style "background" "#f0f0ff"
                 ]
 
             else
-                [ Html.Attributes.style "box-shadow"
-                    "initial"
-                , Html.Attributes.style "background"
-                    "initial"
-                ]
+                []
     in
     colors
         |> List.concatMap viewColor
