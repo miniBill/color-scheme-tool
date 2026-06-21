@@ -1,8 +1,9 @@
-module Main exposing (Model, Msg, main)
+module Main exposing (ColorSpace, Model, Msg, Palette, main)
 
 import Brewer
 import Browser
 import Color
+import Color.Oklab exposing (Oklab)
 import Color.Oklch as Oklch exposing (Oklch)
 import FathersDay
 import Html exposing (Attribute, Html)
@@ -26,11 +27,20 @@ type alias Palette =
 
 
 type alias Model =
-    Palette
+    { current : Palette
+    , colorSpace : ColorSpace
+    }
 
 
-type alias Msg =
-    Palette
+type Msg
+    = Palette Palette
+    | ColorSpace ColorSpace
+
+
+type ColorSpace
+    = OKLCH
+    | OKLAB
+    | SRGB
 
 
 main : Program () Model Msg
@@ -44,20 +54,43 @@ main =
 
 init : Model
 init =
-    Brewer.set3 |> List.map Oklch.fromColor
+    { current = Brewer.set3 |> List.map Oklch.fromColor
+    , colorSpace = OKLCH
+    }
 
 
 view : Model -> Html Msg
 view model =
     Theme.column
         [ Theme.padding ]
-        [ Theme.wrappedRow []
-            [ viewSlice l c h model
-            , viewSlice h c l model
-            , viewSlice h l c model
+        [ [ OKLCH, OKLAB, SRGB ]
+            |> List.map
+                (\colorSpace ->
+                    Html.button
+                        [ Html.Events.onClick (ColorSpace colorSpace) ]
+                        [ Html.text (colorSpaceToString colorSpace) ]
+                )
+            |> Theme.wrappedRow []
+        , Theme.wrappedRow []
+            [ viewSlice l c h model.current
+            , viewSlice h c l model.current
+            , viewSlice h l c model.current
             ]
         , viewPalettes model
         ]
+
+
+colorSpaceToString : ColorSpace -> String
+colorSpaceToString colorSpace =
+    case colorSpace of
+        OKLCH ->
+            "OKLCH"
+
+        OKLAB ->
+            "OKLAB"
+
+        SRGB ->
+            "sRGB"
 
 
 type alias Component =
@@ -359,21 +392,21 @@ viewPalettes model =
                 |> List.sortBy List.length
                 |> List.map (List.map Oklch.fromColor)
     in
-    (if List.member model all then
+    (if List.member model.current all then
         all
 
      else
-        model :: all
+        model.current :: all
     )
         |> List.map
             (\palette ->
-                viewPalette { selected = model == palette } palette
+                viewPalette { selected = model.current == palette } model.colorSpace palette
             )
         |> Theme.wrappedRow [ Html.Attributes.style "align-items" "start" ]
 
 
-viewPalette : { selected : Bool } -> Palette -> Html Msg
-viewPalette { selected } palette =
+viewPalette : { selected : Bool } -> ColorSpace -> Palette -> Html Msg
+viewPalette { selected } colorSpace palette =
     let
         attrs : List (Attribute Msg)
         attrs =
@@ -383,7 +416,7 @@ viewPalette { selected } palette =
         commonAttrs =
             [ Html.Attributes.style "display" "grid"
             , Html.Attributes.style "gap" "8px 0"
-            , Html.Events.onClick palette
+            , Html.Events.onClick (Palette palette)
             ]
 
         selectionAttrs : List (Attribute Msg)
@@ -411,12 +444,13 @@ viewPalette { selected } palette =
             , ( [], "8px" )
             , ( [ "h" ], "auto" )
             , ( [], "16px" )
-            , ( [ "rgb" ], "auto" )
-            , ( [ "r" ], "auto" )
-            , ( [], "8px" )
-            , ( [ "g" ], "auto" )
-            , ( [], "8px" )
-            , ( [ "b" ], "auto" )
+
+            -- , ( [ "rgb" ], "auto" )
+            -- , ( [ "r" ], "auto" )
+            -- , ( [], "8px" )
+            -- , ( [ "g" ], "auto" )
+            -- , ( [], "8px" )
+            -- , ( [ "b" ], "auto" )
             ]
 
         children : List (Html Msg)
@@ -424,12 +458,17 @@ viewPalette { selected } palette =
             palette
                 |> List.indexedMap
                     (\i color ->
-                        viewColor { selected = selected } color
-                            |> List.map (Html.map (\newColor -> List.Extra.setAt i newColor palette))
+                        viewColor { selected = selected } colorSpace color
+                            |> List.map
+                                (Html.map
+                                    (\newColor ->
+                                        Palette (List.Extra.setAt i newColor palette)
+                                    )
+                                )
                     )
                 |> List.concat
 
-        header : List (Html Palette)
+        header : List (Html Msg)
         header =
             if selected then
                 let
@@ -467,7 +506,8 @@ viewPalette { selected } palette =
                 in
                 [ Html.button
                     [ spanColumns
-                    , Html.Events.stopPropagationOn "click" (Json.Decode.succeed ( List.sortBy .hue palette, True ))
+                    , Json.Decode.succeed ( Palette (List.sortBy .hue palette), True )
+                        |> Html.Events.stopPropagationOn "click"
                     ]
                     [ Html.text "Sort by hue" ]
                 , Html.div
@@ -558,54 +598,87 @@ gridTemplate axis others =
     Html.Attributes.style ("grid-template-" ++ axisString) (String.join " " pieces)
 
 
-viewColor : { selected : Bool } -> Oklch -> List (Html Oklch)
-viewColor { selected } color =
+viewColor : { selected : Bool } -> ColorSpace -> Oklch -> List (Html Oklch)
+viewColor { selected } colorSpace color =
     if selected then
-        let
-            rgb : { red : Float, green : Float, blue : Float, alpha : Float }
-            rgb =
-                color
-                    |> Oklch.toColor
-                    |> Color.toRgba
-        in
-        [ colorDiv color
-        , Html.span
-            [ Html.Attributes.style "grid-column" "oklch" ]
-            [ Html.text "oklch(" ]
-        , Html.span
-            [ Html.Attributes.style "grid-column" "l"
-            , Html.Attributes.style "justify-self" "right"
-            ]
-            [ Html.text (Round.round 0 (color.lightness * 100) ++ "% ") ]
-        , Html.span
-            [ Html.Attributes.style "grid-column" "c"
-            , Html.Attributes.style "justify-self" "right"
-            ]
-            [ Html.text (Round.round 3 color.chroma ++ " ") ]
-        , Html.span
-            [ Html.Attributes.style "grid-column" "h"
-            , Html.Attributes.style "justify-self" "right"
-            ]
-            [ Html.text (Round.round 0 (color.hue * 360) ++ ")") ]
-        , Html.span
-            [ Html.Attributes.style "grid-column" "rgb" ]
-            [ Html.text "rgb(" ]
-        , Html.span
-            [ Html.Attributes.style "grid-column" "r"
-            , Html.Attributes.style "justify-self" "right"
-            ]
-            [ Html.text (Round.round 0 (rgb.red * 100) ++ "% ") ]
-        , Html.span
-            [ Html.Attributes.style "grid-column" "g"
-            , Html.Attributes.style "justify-self" "right"
-            ]
-            [ Html.text (Round.round 0 (rgb.green * 100) ++ "% ") ]
-        , Html.span
-            [ Html.Attributes.style "grid-column" "b"
-            , Html.Attributes.style "justify-self" "right"
-            ]
-            [ Html.text (Round.round 0 (rgb.blue * 100) ++ "%)") ]
-        ]
+        case colorSpace of
+            OKLCH ->
+                [ colorDiv color
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "oklch" ]
+                    [ Html.text "oklch(" ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "l"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (color.lightness * 100) ++ "% ") ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "c"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 3 color.chroma ++ " ") ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "h"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (color.hue * 360) ++ ")") ]
+                ]
+
+            OKLAB ->
+                let
+                    oklab : Oklab
+                    oklab =
+                        Oklch.toOklab color
+                in
+                [ colorDiv color
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "oklch" ]
+                    [ Html.text "oklab(" ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "l"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (oklab.lightness * 100) ++ "% ") ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "c"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 3 oklab.a ++ " ") ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "h"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 3 oklab.b ++ ")") ]
+                ]
+
+            SRGB ->
+                let
+                    rgb : { red : Float, green : Float, blue : Float, alpha : Float }
+                    rgb =
+                        color
+                            |> Oklch.toColor
+                            |> Color.toRgba
+                in
+                [ colorDiv color
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "rgb" ]
+                    [ Html.text "rgb(" ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "r"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (rgb.red * 100) ++ "% ") ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "g"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (rgb.green * 100) ++ "% ") ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "b"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (rgb.blue * 100) ++ "%)") ]
+                ]
 
     else
         [ colorDiv color ]
@@ -624,5 +697,10 @@ colorDiv color =
 
 
 update : Msg -> Model -> Model
-update msg _ =
-    msg
+update msg model =
+    case msg of
+        Palette palette ->
+            { model | current = palette }
+
+        ColorSpace colorSpace ->
+            { model | colorSpace = colorSpace }
