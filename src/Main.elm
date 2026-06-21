@@ -8,8 +8,14 @@ import FathersDay
 import Html exposing (Attribute, Html)
 import Html.Attributes
 import Html.Events
+import Math.Matrix4 as Matrix4 exposing (Mat4)
+import Math.Vector2 exposing (Vec2)
+import Math.Vector3 as Vector3 exposing (Vec3)
 import Round
+import Svg exposing (Svg)
+import Svg.Attributes
 import Theme
+import WebGL exposing (Mesh, Shader)
 
 
 type alias Palette =
@@ -42,11 +48,10 @@ view : Model -> Html Msg
 view model =
     Theme.column
         [ Theme.padding ]
-        [ Theme.wrappedRow
-            []
-            [ viewSlice l h model
-            , viewSlice c h model
-            , viewSlice l c model
+        [ Theme.wrappedRow []
+            [ viewSlice l c h model
+            , viewSlice h c l model
+            , viewSlice h l c model
             ]
         , viewPalettes model
         ]
@@ -56,6 +61,9 @@ type alias Component =
     { get : Oklch -> Float
     , set : Float -> Oklch -> Oklch
     , max : Float
+    , default : Float
+    , component : Vec3
+    , label : String
     }
 
 
@@ -64,6 +72,9 @@ l =
     { get = .lightness
     , set = \new color -> { color | lightness = new }
     , max = 1
+    , default = 0.7
+    , component = Vector3.vec3 1 0 0
+    , label = "L"
     }
 
 
@@ -72,6 +83,9 @@ c =
     { get = .chroma
     , set = \new color -> { color | chroma = new }
     , max = 0.37
+    , default = 0.1
+    , component = Vector3.vec3 0 1 0
+    , label = "C"
     }
 
 
@@ -80,12 +94,234 @@ h =
     { get = .hue
     , set = \new color -> { color | hue = new }
     , max = 1
+    , default = 0
+    , component = Vector3.vec3 0 0 1
+    , label = "H"
     }
 
 
-viewSlice : Component -> Component -> Palette -> Html Msg
-viewSlice xComponent yComponent palette =
-    Theme.box [] [ Html.text "TODO - viewSlice" ]
+viewSlice : Component -> Component -> Component -> Palette -> Html Msg
+viewSlice xComponent yComponent missingComponent palette =
+    let
+        padding : number
+        padding =
+            25
+
+        innerWidth : number
+        innerWidth =
+            380
+
+        outerWidth : number
+        outerWidth =
+            innerWidth + 2 * padding
+
+        innerHeight : number
+        innerHeight =
+            200
+
+        outerHeight : number
+        outerHeight =
+            innerHeight + 2 * padding
+
+        axes : List (Svg msg)
+        axes =
+            [ Svg.line
+                [ Svg.Attributes.x1 "-10"
+                , Svg.Attributes.x2 (String.fromFloat (innerWidth + 10))
+                , Svg.Attributes.stroke "white"
+                , Svg.Attributes.y1 (String.fromFloat innerHeight)
+                , Svg.Attributes.y2 (String.fromFloat innerHeight)
+                , Svg.Attributes.strokeWidth "2"
+                ]
+                []
+            , Svg.text_
+                [ Svg.Attributes.x (String.fromInt (innerWidth - 5))
+                , Svg.Attributes.y (String.fromInt (innerHeight + 5))
+                , Svg.Attributes.fill "white"
+                , Svg.Attributes.dominantBaseline "hanging"
+                ]
+                [ Svg.text xComponent.label ]
+            , Svg.line
+                [ Svg.Attributes.x1 "0"
+                , Svg.Attributes.x2 "0"
+                , Svg.Attributes.stroke "white"
+                , Svg.Attributes.y1 "-10"
+                , Svg.Attributes.y2 (String.fromInt (innerHeight + 10))
+                , Svg.Attributes.strokeWidth "2"
+                ]
+                []
+            , Svg.text_
+                [ Svg.Attributes.x "-15"
+                , Svg.Attributes.y "5"
+                , Svg.Attributes.fill "white"
+                ]
+                [ Svg.text yComponent.label ]
+            ]
+
+        dots : List (Svg msg)
+        dots =
+            palette
+                |> List.map
+                    (\color ->
+                        Svg.circle
+                            [ Svg.Attributes.cx
+                                (xComponent.get color
+                                    |> project 0 xComponent.max 0 innerWidth
+                                    |> String.fromFloat
+                                )
+                            , Svg.Attributes.cy
+                                (yComponent.get color
+                                    |> project 0 yComponent.max innerHeight 0
+                                    |> String.fromFloat
+                                )
+                            , Svg.Attributes.r "5"
+                            , color
+                                |> Oklch.toCssString
+                                |> Svg.Attributes.fill
+                            , Svg.Attributes.stroke "black"
+                            ]
+                            []
+                    )
+
+        svg : Html msg
+        svg =
+            Svg.svg
+                [ Html.Attributes.width outerWidth
+                , [ -padding, -padding, outerWidth, outerHeight ]
+                    |> List.map String.fromInt
+                    |> String.join " "
+                    |> Svg.Attributes.viewBox
+                , Html.Attributes.style "display" "block"
+                , Html.Attributes.style "position" "absolute"
+                , Html.Attributes.style "top" "8px"
+                , Html.Attributes.style "left" "8px"
+                ]
+                (axes ++ dots)
+
+        webgl : Html msg
+        webgl =
+            WebGL.toHtml
+                [ Html.Attributes.width outerWidth
+                , Html.Attributes.height outerHeight
+                , Html.Attributes.style "display" "block"
+                ]
+                [ WebGL.entity
+                    vertexShader
+                    fragmentShader
+                    mesh
+                    { componentMatrix =
+                        Matrix4.makeBasis
+                            (Vector3.scale xComponent.max xComponent.component)
+                            (Vector3.scale yComponent.max yComponent.component)
+                            (Vector3.scale missingComponent.default missingComponent.component)
+                    , innerHeight = innerHeight
+                    , innerWidth = innerWidth
+                    , padding = padding
+                    }
+                ]
+    in
+    Theme.box
+        [ Html.Attributes.style "position" "relative" ]
+        [ webgl
+        , svg
+        ]
+
+
+type alias Vertex =
+    { position : Vec2
+    }
+
+
+mesh : Mesh Vertex
+mesh =
+    WebGL.triangleFan
+        [ Vertex (Math.Vector2.vec2 -1 -1)
+        , Vertex (Math.Vector2.vec2 -1 1)
+        , Vertex (Math.Vector2.vec2 1 1)
+        , Vertex (Math.Vector2.vec2 1 -1)
+        ]
+
+
+type alias Uniforms =
+    { innerWidth : Float
+    , innerHeight : Float
+    , padding : Float
+    , componentMatrix : Mat4
+    }
+
+
+vertexShader : Shader Vertex Uniforms { vpos : Vec2 }
+vertexShader =
+    [glsl|
+        attribute vec2 position;
+        varying vec2 vpos;
+
+        void main () {
+            gl_Position = vec4(position, 0, 1);
+            vpos = position;
+        }
+    |]
+
+
+fragmentShader : Shader {} Uniforms { vpos : Vec2 }
+fragmentShader =
+    [glsl|
+        precision mediump float;
+        
+        varying vec2 vpos;
+        uniform float innerWidth;
+        uniform float innerHeight;
+        uniform float padding;
+        uniform mat4 componentMatrix;
+
+        float linearToSRGB(float v) {
+            return
+                v <= 0.00313066844250063
+                    ? v * 12.92
+                    : 1.055 * pow(v, 1.0 / 2.4) - 0.055;
+        }
+
+        void main () {
+            vec2 projected = (gl_FragCoord.xy - vec2(padding, padding)) / vec2(innerWidth, innerHeight);
+            if(projected.x < 0. || projected.y < 0. || projected.x > 1. || projected.y > 1.) {
+                gl_FragColor = vec4(0,0,0,1);
+            }
+            else {
+                vec4 oklcha = componentMatrix * vec4(projected, 1, 1);
+                float l = oklcha.x;
+                float c = oklcha.y;
+                float h = oklcha.z;
+                float alpha = oklcha.w;
+                float a = c * cos(h * 6.28318531);
+                float b = c * sin(h * 6.28318531);
+                float lOut = pow(l + 0.3963377774 * a + 0.2158037573 * b, 3.0);
+                float m = pow(l - 0.1055613458 * a - 0.0638541728 * b, 3.0);
+                float s = pow(l - 0.0894841775 * a - 1.291485548 * b, 3.0);
+                float red = linearToSRGB(4.0767416621 * lOut - 3.3077115913 * m + 0.2309699292 * s);
+                float green = linearToSRGB(-1.2684380046 * lOut + 2.6097574011 * m - 0.3413193965 * s);
+                float blue = linearToSRGB(-0.0041960863 * lOut - 0.7034186147 * m + 1.707614701 * s);
+                if(red < 0. || red > 1. || green < 0. || green > 1. || blue < 0. || blue > 1.) {
+                    gl_FragColor = vec4(0,0,0,1);
+                } else {
+                    gl_FragColor = vec4(red, green, blue, alpha);
+                }
+            }
+        }
+    |]
+
+
+linearToSRGB v =
+    -- Higher precision constant from https://entropymine.com/imageworsener/srgbformula/
+    if v <= 0.00313066844250063 then
+        v * 12.92
+
+    else
+        1.055 * v ^ (1 / 2.4) - 0.055
+
+
+project : Float -> Float -> Float -> Float -> Float -> Float
+project fromMin fromMax toMin toMax v =
+    (v - fromMin) / (fromMax - fromMin) * (toMax - toMin) + toMin
 
 
 viewPalettes : Model -> Html Msg

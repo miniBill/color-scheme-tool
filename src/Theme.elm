@@ -1,4 +1,4 @@
-module Theme exposing (box, column, gap, padding, row, wrappedRow)
+module Theme exposing (box, column, padding, wrappedRow)
 
 import Html exposing (Attribute, Html)
 import Html.Attributes
@@ -20,16 +20,6 @@ box attrs children =
         (Html.Attributes.style "padding" "8px"
             :: Html.Attributes.style "border" "1px solid black"
             :: Html.Attributes.style "border-radius" "8px"
-            :: attrs
-        )
-        children
-
-
-row : List (Attribute msg) -> List (Html msg) -> Html msg
-row attrs children =
-    Html.div
-        (Html.Attributes.style "display" "flex"
-            :: gap
             :: attrs
         )
         children
