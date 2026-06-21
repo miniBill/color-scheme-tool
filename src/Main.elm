@@ -109,7 +109,7 @@ viewSlice xComponent yComponent missingComponent palette =
 
         innerWidth : number
         innerWidth =
-            380
+            400
 
         outerWidth : number
         outerWidth =
@@ -117,7 +117,7 @@ viewSlice xComponent yComponent missingComponent palette =
 
         innerHeight : number
         innerHeight =
-            200
+            275
 
         outerHeight : number
         outerHeight =
