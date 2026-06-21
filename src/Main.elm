@@ -41,7 +41,7 @@ init =
 view : Model -> Html Msg
 view model =
     Theme.column
-        [ Html.Attributes.style "padding" "8px" ]
+        [ Theme.padding ]
         [ Theme.wrappedRow
             []
             [ viewSlice l h model

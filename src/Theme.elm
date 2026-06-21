@@ -1,4 +1,4 @@
-module Theme exposing (box, column, gap, row, wrappedRow)
+module Theme exposing (box, column, gap, padding, row, wrappedRow)
 
 import Html exposing (Attribute, Html)
 import Html.Attributes
@@ -7,6 +7,11 @@ import Html.Attributes
 gap : Attribute msg
 gap =
     Html.Attributes.style "gap" "8px"
+
+
+padding : Attribute msg
+padding =
+    Html.Attributes.style "padding" "8px"
 
 
 box : List (Attribute msg) -> List (Html msg) -> Html msg
