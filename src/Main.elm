@@ -2,6 +2,7 @@ module Main exposing (Model, Msg, main)
 
 import Brewer
 import Browser
+import Color
 import Color.Oklch as Oklch exposing (Oklch)
 import FathersDay
 import Html exposing (Attribute, Html)
@@ -77,7 +78,23 @@ viewPalette { selected } colors =
         commonAttrs =
             [ Html.Attributes.style "display" "grid"
             , Html.Attributes.style "gap" "8px 0"
-            , Html.Attributes.style "grid-template-columns" "[color] 24px 8px [oklch] auto [l] auto 8px [c] auto 8px [h] auto"
+            , gridTemplate Column
+                [ ( [ "color" ], "24px" )
+                , ( [], "8px" )
+                , ( [ "oklch" ], "auto" )
+                , ( [ "l" ], "auto" )
+                , ( [], "8px" )
+                , ( [ "c" ], "auto" )
+                , ( [], "8px" )
+                , ( [ "h" ], "auto" )
+                , ( [], "16px" )
+                , ( [ "rgb" ], "auto" )
+                , ( [ "r" ], "auto" )
+                , ( [], "8px" )
+                , ( [ "g" ], "auto" )
+                , ( [], "8px" )
+                , ( [ "b" ], "auto" )
+                ]
             , Html.Events.onClick colors
             , Html.Attributes.style "padding" "8px"
             , Html.Attributes.style "border" "1px solid black"
@@ -99,8 +116,57 @@ viewPalette { selected } colors =
         |> Html.div attrs
 
 
+type GridAxis
+    = Row
+    | Column
+
+
+gridTemplate : GridAxis -> List ( List String, String ) -> Attribute msg
+gridTemplate axis others =
+    let
+        axisString : String
+        axisString =
+            case axis of
+                Row ->
+                    "rows"
+
+                Column ->
+                    "columns"
+
+        pieces : List String
+        pieces =
+            List.concatMap otherToString others
+
+        labelsToString : List String -> List String
+        labelsToString labels =
+            if List.isEmpty labels then
+                []
+
+            else
+                [ "[" ++ String.join " " labels ++ "]" ]
+
+        otherToString : ( List String, String ) -> List String
+        otherToString ( labels, column ) =
+            labelsToString labels
+                ++ (if String.isEmpty column then
+                        []
+
+                    else
+                        [ column ]
+                   )
+    in
+    Html.Attributes.style ("grid-template-" ++ axisString) (String.join " " pieces)
+
+
 viewColor : Oklch -> List (Html Msg)
 viewColor color =
+    let
+        rgb : { red : Float, green : Float, blue : Float, alpha : Float }
+        rgb =
+            color
+                |> Oklch.toColor
+                |> Color.toRgba
+    in
     [ Html.span
         [ Html.Attributes.style "background-color" (Oklch.toCssString color)
         , Html.Attributes.style "grid-column" "color"
@@ -124,6 +190,24 @@ viewColor color =
         , Html.Attributes.style "justify-self" "right"
         ]
         [ Html.text (Round.round 0 (color.hue * 360) ++ ")") ]
+    , Html.span
+        [ Html.Attributes.style "grid-column" "rgb" ]
+        [ Html.text "rgb(" ]
+    , Html.span
+        [ Html.Attributes.style "grid-column" "r"
+        , Html.Attributes.style "justify-self" "right"
+        ]
+        [ Html.text (Round.round 0 (rgb.red * 100) ++ "% ") ]
+    , Html.span
+        [ Html.Attributes.style "grid-column" "g"
+        , Html.Attributes.style "justify-self" "right"
+        ]
+        [ Html.text (Round.round 0 (rgb.green * 100) ++ "% ") ]
+    , Html.span
+        [ Html.Attributes.style "grid-column" "b"
+        , Html.Attributes.style "justify-self" "right"
+        ]
+        [ Html.text (Round.round 0 (rgb.blue * 100) ++ "% ") ]
     , Html.span [] []
     ]
 
