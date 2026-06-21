@@ -437,20 +437,13 @@ viewPalette { selected } colorSpace palette =
         columns =
             [ ( [ "color" ], "24px" )
             , ( [], "8px" )
-            , ( [ "oklch" ], "auto" )
-            , ( [ "l" ], "auto" )
+            , ( [ "oklch", "oklab", "rgb" ], "auto" )
+            , ( [ "l", "r" ], "auto" )
             , ( [], "8px" )
-            , ( [ "c" ], "auto" )
+            , ( [ "c", "a", "g" ], "auto" )
             , ( [], "8px" )
-            , ( [ "h" ], "auto" )
+            , ( [ "h", "b" ], "auto" )
             , ( [], "16px" )
-
-            -- , ( [ "rgb" ], "auto" )
-            -- , ( [ "r" ], "auto" )
-            -- , ( [], "8px" )
-            -- , ( [ "g" ], "auto" )
-            -- , ( [], "8px" )
-            -- , ( [ "b" ], "auto" )
             ]
 
         children : List (Html Msg)
@@ -496,7 +489,7 @@ viewPalette { selected } colorSpace palette =
                             |> List.Extra.minimumBy Triple.Extra.first
                             |> Maybe.map
                                 (\( delta, ca, cb ) ->
-                                    [ Html.text (Round.round 2 delta ++ " between ")
+                                    [ Html.text (Round.round 3 delta ++ " between ")
                                     , colorDiv (Oklch.fromOklab ca)
                                     , Html.text " and "
                                     , colorDiv (Oklch.fromOklab cb)
@@ -632,7 +625,7 @@ viewColor { selected } colorSpace color =
                 in
                 [ colorDiv color
                 , Html.span
-                    [ Html.Attributes.style "grid-column" "oklch" ]
+                    [ Html.Attributes.style "grid-column" "oklab" ]
                     [ Html.text "oklab(" ]
                 , Html.span
                     [ Html.Attributes.style "grid-column" "l"
@@ -640,12 +633,12 @@ viewColor { selected } colorSpace color =
                     ]
                     [ Html.text (Round.round 0 (oklab.lightness * 100) ++ "% ") ]
                 , Html.span
-                    [ Html.Attributes.style "grid-column" "c"
+                    [ Html.Attributes.style "grid-column" "a"
                     , Html.Attributes.style "justify-self" "right"
                     ]
                     [ Html.text (Round.round 3 oklab.a ++ " ") ]
                 , Html.span
-                    [ Html.Attributes.style "grid-column" "h"
+                    [ Html.Attributes.style "grid-column" "b"
                     , Html.Attributes.style "justify-self" "right"
                     ]
                     [ Html.text (Round.round 3 oklab.b ++ ")") ]
