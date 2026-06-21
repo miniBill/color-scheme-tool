@@ -78,23 +78,6 @@ viewPalette { selected } colors =
         commonAttrs =
             [ Html.Attributes.style "display" "grid"
             , Html.Attributes.style "gap" "8px 0"
-            , gridTemplate Column
-                [ ( [ "color" ], "24px" )
-                , ( [], "8px" )
-                , ( [ "oklch" ], "auto" )
-                , ( [ "l" ], "auto" )
-                , ( [], "8px" )
-                , ( [ "c" ], "auto" )
-                , ( [], "8px" )
-                , ( [ "h" ], "auto" )
-                , ( [], "16px" )
-                , ( [ "rgb" ], "auto" )
-                , ( [ "r" ], "auto" )
-                , ( [], "8px" )
-                , ( [ "g" ], "auto" )
-                , ( [], "8px" )
-                , ( [ "b" ], "auto" )
-                ]
             , Html.Events.onClick colors
             , Html.Attributes.style "padding" "8px"
             , Html.Attributes.style "border" "1px solid black"
@@ -106,13 +89,33 @@ viewPalette { selected } colors =
             if selected then
                 [ Html.Attributes.style "box-shadow" "0px 0px 4px 4px #ccf"
                 , Html.Attributes.style "background" "#f0f0ff"
+                , gridTemplate Column
+                    [ ( [ "color" ], "24px" )
+                    , ( [], "8px" )
+                    , ( [ "oklch" ], "auto" )
+                    , ( [ "l" ], "auto" )
+                    , ( [], "8px" )
+                    , ( [ "c" ], "auto" )
+                    , ( [], "8px" )
+                    , ( [ "h" ], "auto" )
+                    , ( [], "16px" )
+                    , ( [ "rgb" ], "auto" )
+                    , ( [ "r" ], "auto" )
+                    , ( [], "8px" )
+                    , ( [ "g" ], "auto" )
+                    , ( [], "8px" )
+                    , ( [ "b" ], "auto" )
+                    ]
                 ]
 
             else
-                []
+                [ gridTemplate Column
+                    [ ( [ "color" ], "24px" )
+                    ]
+                ]
     in
     colors
-        |> List.concatMap viewColor
+        |> List.concatMap (viewColor { selected = selected })
         |> Html.div attrs
 
 
@@ -158,58 +161,67 @@ gridTemplate axis others =
     Html.Attributes.style ("grid-template-" ++ axisString) (String.join " " pieces)
 
 
-viewColor : Oklch -> List (Html Msg)
-viewColor color =
+viewColor : { selected : Bool } -> Oklch -> List (Html Msg)
+viewColor { selected } color =
     let
         rgb : { red : Float, green : Float, blue : Float, alpha : Float }
         rgb =
             color
                 |> Oklch.toColor
                 |> Color.toRgba
+
+        colorDiv : Html msg
+        colorDiv =
+            Html.div
+                [ Html.Attributes.style "background-color" (Oklch.toCssString color)
+                , Html.Attributes.style "grid-column" "color"
+                , Html.Attributes.style "width" "24px"
+                , Html.Attributes.style "height" "24px"
+                ]
+                []
     in
-    [ Html.span
-        [ Html.Attributes.style "background-color" (Oklch.toCssString color)
-        , Html.Attributes.style "grid-column" "color"
+    if selected then
+        [ colorDiv
+        , Html.span
+            [ Html.Attributes.style "grid-column" "oklch" ]
+            [ Html.text "oklch(" ]
+        , Html.span
+            [ Html.Attributes.style "grid-column" "l"
+            , Html.Attributes.style "justify-self" "right"
+            ]
+            [ Html.text (Round.round 0 (color.lightness * 100) ++ "% ") ]
+        , Html.span
+            [ Html.Attributes.style "grid-column" "c"
+            , Html.Attributes.style "justify-self" "right"
+            ]
+            [ Html.text (Round.round 3 color.chroma ++ " ") ]
+        , Html.span
+            [ Html.Attributes.style "grid-column" "h"
+            , Html.Attributes.style "justify-self" "right"
+            ]
+            [ Html.text (Round.round 0 (color.hue * 360) ++ ")") ]
+        , Html.span
+            [ Html.Attributes.style "grid-column" "rgb" ]
+            [ Html.text "rgb(" ]
+        , Html.span
+            [ Html.Attributes.style "grid-column" "r"
+            , Html.Attributes.style "justify-self" "right"
+            ]
+            [ Html.text (Round.round 0 (rgb.red * 100) ++ "% ") ]
+        , Html.span
+            [ Html.Attributes.style "grid-column" "g"
+            , Html.Attributes.style "justify-self" "right"
+            ]
+            [ Html.text (Round.round 0 (rgb.green * 100) ++ "% ") ]
+        , Html.span
+            [ Html.Attributes.style "grid-column" "b"
+            , Html.Attributes.style "justify-self" "right"
+            ]
+            [ Html.text (Round.round 0 (rgb.blue * 100) ++ "% ") ]
         ]
-        []
-    , Html.span
-        [ Html.Attributes.style "grid-column" "oklch" ]
-        [ Html.text "oklch(" ]
-    , Html.span
-        [ Html.Attributes.style "grid-column" "l"
-        , Html.Attributes.style "justify-self" "right"
-        ]
-        [ Html.text (Round.round 0 (color.lightness * 100) ++ "% ") ]
-    , Html.span
-        [ Html.Attributes.style "grid-column" "c"
-        , Html.Attributes.style "justify-self" "right"
-        ]
-        [ Html.text (Round.round 3 color.chroma ++ " ") ]
-    , Html.span
-        [ Html.Attributes.style "grid-column" "h"
-        , Html.Attributes.style "justify-self" "right"
-        ]
-        [ Html.text (Round.round 0 (color.hue * 360) ++ ")") ]
-    , Html.span
-        [ Html.Attributes.style "grid-column" "rgb" ]
-        [ Html.text "rgb(" ]
-    , Html.span
-        [ Html.Attributes.style "grid-column" "r"
-        , Html.Attributes.style "justify-self" "right"
-        ]
-        [ Html.text (Round.round 0 (rgb.red * 100) ++ "% ") ]
-    , Html.span
-        [ Html.Attributes.style "grid-column" "g"
-        , Html.Attributes.style "justify-self" "right"
-        ]
-        [ Html.text (Round.round 0 (rgb.green * 100) ++ "% ") ]
-    , Html.span
-        [ Html.Attributes.style "grid-column" "b"
-        , Html.Attributes.style "justify-self" "right"
-        ]
-        [ Html.text (Round.round 0 (rgb.blue * 100) ++ "% ") ]
-    , Html.span [] []
-    ]
+
+    else
+        [ colorDiv ]
 
 
 update : Msg -> Model -> Model
