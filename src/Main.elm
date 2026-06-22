@@ -59,10 +59,11 @@ main =
 init : Model
 init =
     { current =
-        greedyPalette 0 ( Oklab.oklab 1 0 0, [] )
+        greedyPalette 31 ( Oklab.oklab 1 0 0, [] )
             |> List.NonEmpty.toList
             |> List.map Oklch.fromOklab
-            |> List.sortBy .hue
+
+    -- |> List.sortBy .hue
     , selectedColor = Nothing
     , colorSpace = OKLCH
     }
@@ -85,6 +86,10 @@ greedyPalette n (( h, t ) as acc) =
 greedyPaletteHelp : Int -> Int -> Int -> Maybe Oklab -> Float -> ( Oklab, List Oklab ) -> Maybe Oklab
 greedyPaletteHelp r g b best bestDistance (( h, t ) as acc) =
     let
+        step : number
+        step =
+            8
+
         candidate : Oklab
         candidate =
             Color.rgb255 r g b
@@ -93,7 +98,7 @@ greedyPaletteHelp r g b best bestDistance (( h, t ) as acc) =
         distance : Oklab -> Float
         distance p =
             sqrt
-                ((candidate.lightness - p.lightness)
+                ((0.1 * (candidate.lightness - p.lightness))
                     ^ 2
                     + (candidate.a - p.a)
                     ^ 2
@@ -112,18 +117,14 @@ greedyPaletteHelp r g b best bestDistance (( h, t ) as acc) =
             else
                 ( best, bestDistance )
     in
-    if b < 255 then
-        greedyPaletteHelp r g (b + 1) nextBest nextBestDistance acc
+    if (b + step) < 256 then
+        greedyPaletteHelp r g (b + step) nextBest nextBestDistance acc
 
-    else if g < 255 then
-        greedyPaletteHelp r (g + 1) 0 nextBest nextBestDistance acc
+    else if (g + step) < 256 then
+        greedyPaletteHelp r (g + step) 0 nextBest nextBestDistance acc
 
-    else if r < 255 then
-        let
-            _ =
-                Debug.log "greedyPaletteHelp step" r
-        in
-        greedyPaletteHelp (r + 1) 0 0 nextBest nextBestDistance acc
+    else if (r + step) < 256 then
+        greedyPaletteHelp (r + step) 0 0 nextBest nextBestDistance acc
 
     else
         best
