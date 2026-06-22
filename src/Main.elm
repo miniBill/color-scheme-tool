@@ -3,7 +3,7 @@ module Main exposing (ColorSpace, Model, Msg, Palette, main)
 import Brewer
 import Browser
 import Color
-import Color.Oklab exposing (Oklab)
+import Color.Oklab as Oklab exposing (Oklab)
 import Color.Oklch as Oklch exposing (Oklch)
 import FathersDay
 import Html exposing (Attribute, Html)
@@ -11,6 +11,7 @@ import Html.Attributes
 import Html.Events
 import Json.Decode
 import List.Extra
+import List.NonEmpty
 import Math.Matrix4 as Matrix4 exposing (Mat4)
 import Math.Vector2 exposing (Vec2)
 import Math.Vector3 as Vector3 exposing (Vec3)
@@ -58,39 +59,107 @@ main =
 init : Model
 init =
     { current =
-        List.range 0 31
-            |> List.map
-                (\index ->
-                    let
-                        hueCount : number
-                        hueCount =
-                            8
-
-                        ( x, y, z ) =
-                            ( modBy hueCount index
-                            , (index // hueCount) |> modBy 2
-                            , index // (hueCount * 2)
-                            )
-
-                        l : Float
-                        l =
-                            project 0 1 0.5 0.8 (toFloat y)
-
-                        c : Float
-                        c =
-                            project 0 1 0.075 0.15 (toFloat z)
-
-                        h : Float
-                        h =
-                            project 0 (hueCount - 1) 0 ((hueCount - 1) / hueCount) (toFloat x)
-                                + (1 / (hueCount * 2))
-                    in
-                    Oklch.oklch l c h
-                )
+        greedyPalette 0 ( Oklab.oklab 1 0 0, [] )
+            |> List.NonEmpty.toList
+            |> List.map Oklch.fromOklab
             |> List.sortBy .hue
     , selectedColor = Nothing
     , colorSpace = OKLCH
     }
+
+
+greedyPalette : Int -> ( Oklab, List Oklab ) -> ( Oklab, List Oklab )
+greedyPalette n (( h, t ) as acc) =
+    if n <= 0 then
+        acc
+
+    else
+        case greedyPaletteHelp 0 0 0 Nothing 0 acc of
+            Just found ->
+                greedyPalette (n - 1) ( found, h :: t )
+
+            Nothing ->
+                acc
+
+
+greedyPaletteHelp : Int -> Int -> Int -> Maybe Oklab -> Float -> ( Oklab, List Oklab ) -> Maybe Oklab
+greedyPaletteHelp r g b best bestDistance (( h, t ) as acc) =
+    let
+        candidate : Oklab
+        candidate =
+            Color.rgb255 r g b
+                |> Oklab.fromColor
+
+        distance : Oklab -> Float
+        distance p =
+            sqrt
+                ((candidate.lightness - p.lightness)
+                    ^ 2
+                    + (candidate.a - p.a)
+                    ^ 2
+                    + (candidate.b - p.b)
+                    ^ 2
+                )
+
+        minDistance : Float
+        minDistance =
+            List.foldl (\e a -> min a (distance e)) (distance h) t
+
+        ( nextBest, nextBestDistance ) =
+            if minDistance > bestDistance then
+                ( Just candidate, minDistance )
+
+            else
+                ( best, bestDistance )
+    in
+    if b < 255 then
+        greedyPaletteHelp r g (b + 1) nextBest nextBestDistance acc
+
+    else if g < 255 then
+        greedyPaletteHelp r (g + 1) 0 nextBest nextBestDistance acc
+
+    else if r < 255 then
+        let
+            _ =
+                Debug.log "greedyPaletteHelp step" r
+        in
+        greedyPaletteHelp (r + 1) 0 0 nextBest nextBestDistance acc
+
+    else
+        best
+
+
+uniformPalette : List Oklch
+uniformPalette =
+    List.range 0 31
+        |> List.map
+            (\index ->
+                let
+                    hueCount : number
+                    hueCount =
+                        8
+
+                    ( x, y, z ) =
+                        ( modBy hueCount index
+                        , (index // hueCount) |> modBy 2
+                        , index // (hueCount * 2)
+                        )
+
+                    l : Float
+                    l =
+                        project 0 1 0.5 0.8 (toFloat y)
+
+                    c : Float
+                    c =
+                        project 0 1 0.075 0.15 (toFloat z)
+
+                    h : Float
+                    h =
+                        project 0 (hueCount - 1) 0 ((hueCount - 1) / hueCount) (toFloat x)
+                            + (1 / (hueCount * 2))
+                in
+                Oklch.oklch l c h
+            )
 
 
 view : Model -> Html Msg
