@@ -88,7 +88,6 @@ init =
                     Oklch.oklch l c h
                 )
             |> List.sortBy .hue
-            |> List.filter (\{ lightness } -> lightness == 0.8)
     , selectedColor = Nothing
     , colorSpace = OKLCH
     }
