@@ -1,4 +1,4 @@
-module Brewer exposing (all, set3)
+module Brewer exposing (all)
 
 {-| Categorical color palettes by Cynthia Brewer
 -}

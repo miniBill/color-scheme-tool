@@ -17,6 +17,7 @@ import Math.Vector3 as Vector3 exposing (Vec3)
 import Round
 import Svg exposing (Svg)
 import Svg.Attributes
+import Svg.Events
 import Theme
 import Triple.Extra
 import WebGL exposing (Mesh, Shader)
@@ -28,6 +29,7 @@ type alias Palette =
 
 type alias Model =
     { current : Palette
+    , selectedColor : Maybe Oklch
     , colorSpace : ColorSpace
     }
 
@@ -35,6 +37,7 @@ type alias Model =
 type Msg
     = Palette Palette
     | ColorSpace ColorSpace
+    | SelectColor Oklch
 
 
 type ColorSpace
@@ -54,7 +57,39 @@ main =
 
 init : Model
 init =
-    { current = Brewer.set3 |> List.map Oklch.fromColor
+    { current =
+        List.range 0 31
+            |> List.map
+                (\index ->
+                    let
+                        hueCount : number
+                        hueCount =
+                            8
+
+                        ( x, y, z ) =
+                            ( modBy hueCount index
+                            , (index // hueCount) |> modBy 2
+                            , index // (hueCount * 2)
+                            )
+
+                        l : Float
+                        l =
+                            project 0 1 0.5 0.8 (toFloat y)
+
+                        c : Float
+                        c =
+                            project 0 1 0.075 0.15 (toFloat z)
+
+                        h : Float
+                        h =
+                            project 0 (hueCount - 1) 0 ((hueCount - 1) / hueCount) (toFloat x)
+                                + (1 / (hueCount * 2))
+                    in
+                    Oklch.oklch l c h
+                )
+            |> List.sortBy .hue
+            |> List.filter (\{ lightness } -> lightness == 0.8)
+    , selectedColor = Nothing
     , colorSpace = OKLCH
     }
 
@@ -72,12 +107,18 @@ view model =
                 )
             |> Theme.wrappedRow []
         , Theme.wrappedRow []
-            [ viewSlice l c h model.current
-            , viewSlice h c l model.current
-            , viewSlice h l c model.current
+            [ viewSlice model lComponent cComponent hComponent model.current
+            , viewSlice model hComponent cComponent lComponent model.current
+            , viewSlice model hComponent lComponent cComponent model.current
             ]
+        , viewHorizontalPalette model.current
         , viewPalettes model
         ]
+
+
+viewHorizontalPalette : Palette -> Html Msg
+viewHorizontalPalette palette =
+    palette |> List.map colorDiv |> Theme.wrappedRow []
 
 
 colorSpaceToString : ColorSpace -> String
@@ -103,8 +144,8 @@ type alias Component =
     }
 
 
-l : Component
-l =
+lComponent : Component
+lComponent =
     { get = .lightness
     , set = \new color -> { color | lightness = new }
     , max = 1
@@ -114,8 +155,8 @@ l =
     }
 
 
-c : Component
-c =
+cComponent : Component
+cComponent =
     { get = .chroma
     , set = \new color -> { color | chroma = new }
     , max = 0.37
@@ -125,8 +166,8 @@ c =
     }
 
 
-h : Component
-h =
+hComponent : Component
+hComponent =
     { get = .hue
     , set = \new color -> { color | hue = new }
     , max = 1
@@ -136,8 +177,8 @@ h =
     }
 
 
-viewSlice : Component -> Component -> Component -> Palette -> Html Msg
-viewSlice xComponent yComponent missingComponent palette =
+viewSlice : Model -> Component -> Component -> Component -> Palette -> Html Msg
+viewSlice model xComponent yComponent missingComponent palette =
     let
         padding : number
         padding =
@@ -194,7 +235,7 @@ viewSlice xComponent yComponent missingComponent palette =
                 [ Svg.text yComponent.label ]
             ]
 
-        dots : List (Svg msg)
+        dots : List (Svg Msg)
         dots =
             palette
                 |> List.map
@@ -214,12 +255,18 @@ viewSlice xComponent yComponent missingComponent palette =
                             , color
                                 |> Oklch.toCssString
                                 |> Svg.Attributes.fill
-                            , Svg.Attributes.stroke "black"
+                            , if model.selectedColor == Just color then
+                                Svg.Attributes.stroke "white"
+
+                              else
+                                Svg.Attributes.stroke "black"
+                            , Svg.Events.onClick (SelectColor color)
+                            , Svg.Attributes.cursor "pointer"
                             ]
                             []
                     )
 
-        svg : Html msg
+        svg : Html Msg
         svg =
             Svg.svg
                 [ Html.Attributes.width outerWidth
@@ -234,17 +281,22 @@ viewSlice xComponent yComponent missingComponent palette =
                 ]
                 (axes ++ dots)
 
-        missingComponentAverage : Float
-        missingComponentAverage =
-            if List.isEmpty palette then
-                missingComponent.default
+        missingComponentValue : Float
+        missingComponentValue =
+            case model.selectedColor of
+                Just color ->
+                    missingComponent.get color
 
-            else
-                (palette
-                    |> List.map missingComponent.get
-                    |> List.sum
-                )
-                    / toFloat (List.length palette)
+                Nothing ->
+                    if List.isEmpty palette then
+                        missingComponent.default
+
+                    else
+                        (palette
+                            |> List.map missingComponent.get
+                            |> List.sum
+                        )
+                            / toFloat (List.length palette)
 
         webgl : Html msg
         webgl =
@@ -261,7 +313,7 @@ viewSlice xComponent yComponent missingComponent palette =
                         Matrix4.makeBasis
                             (Vector3.scale xComponent.max xComponent.component)
                             (Vector3.scale yComponent.max yComponent.component)
-                            (Vector3.scale missingComponentAverage missingComponent.component)
+                            (Vector3.scale missingComponentValue missingComponent.component)
                     , innerHeight = innerHeight
                     , innerWidth = innerWidth
                     , padding = padding
@@ -513,7 +565,7 @@ viewPalette { selected } colorSpace palette =
                             Html.span [ Html.Attributes.style "font-weight" "bold" ] [ Html.text label ]
                         )
                         [ "Component", "Min", "Max", "Range" ]
-                        ++ List.concatMap componentInfo [ l, c, h ]
+                        ++ List.concatMap componentInfo [ lComponent, cComponent, hComponent ]
                     )
                 , Html.div
                     [ spanColumns ]
@@ -697,3 +749,10 @@ update msg model =
 
         ColorSpace colorSpace ->
             { model | colorSpace = colorSpace }
+
+        SelectColor color ->
+            if Just color == model.selectedColor then
+                { model | selectedColor = Nothing }
+
+            else
+                { model | selectedColor = Just color }
