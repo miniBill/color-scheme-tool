@@ -1,4 +1,4 @@
-module Brewer exposing (all)
+module Brewer exposing (Palette, all)
 
 {-| Categorical color palettes by Cynthia Brewer
 -}
@@ -8,6 +8,11 @@ import Color exposing (Color)
 import Hex
 
 
+type alias Palette =
+    List Color
+
+
+all : List Palette
 all =
     [ accent
     , dark2
@@ -20,7 +25,7 @@ all =
     ]
 
 
-accent : List Color
+accent : Palette
 accent =
     toPalette
         [ "#7fc97f"
@@ -34,7 +39,7 @@ accent =
         ]
 
 
-dark2 : List Color
+dark2 : Palette
 dark2 =
     toPalette
         [ "#1b9e77"
@@ -48,7 +53,7 @@ dark2 =
         ]
 
 
-paired : List Color
+paired : Palette
 paired =
     toPalette
         [ "#a6cee3"
@@ -66,7 +71,7 @@ paired =
         ]
 
 
-pastel1 : List Color
+pastel1 : Palette
 pastel1 =
     toPalette
         [ "#fbb4ae"
@@ -81,7 +86,7 @@ pastel1 =
         ]
 
 
-pastel2 : List Color
+pastel2 : Palette
 pastel2 =
     toPalette
         [ "#b3e2cd"
@@ -95,7 +100,7 @@ pastel2 =
         ]
 
 
-set1 : List Color
+set1 : Palette
 set1 =
     toPalette
         [ "#e41a1c"
@@ -110,7 +115,7 @@ set1 =
         ]
 
 
-set2 : List Color
+set2 : Palette
 set2 =
     toPalette
         [ "#66c2a5"
@@ -124,7 +129,7 @@ set2 =
         ]
 
 
-set3 : List Color
+set3 : Palette
 set3 =
     toPalette
         [ "#8dd3c7"
@@ -142,7 +147,7 @@ set3 =
         ]
 
 
-toPalette : List String -> List Color
+toPalette : List String -> Palette
 toPalette colors =
     List.map toColor colors
 
@@ -150,6 +155,7 @@ toPalette colors =
 toColor : String -> Color
 toColor input =
     let
+        hex : Result String Int
         hex =
             Hex.fromString (String.dropLeft 1 input)
     in
