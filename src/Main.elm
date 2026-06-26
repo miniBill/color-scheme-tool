@@ -175,11 +175,27 @@ view model =
                         [ Html.text (colorSpaceToString colorSpace) ]
                 )
             |> Theme.wrappedRow []
-        , Theme.wrappedRow []
-            [ viewSlice model lComponent cComponent hComponent model.current
-            , viewSlice model hComponent cComponent lComponent model.current
-            , viewSlice model hComponent lComponent cComponent model.current
-            ]
+        , (case model.colorSpace of
+            OKLCH ->
+                [ ( lComponent, cComponent, hComponent )
+                , ( hComponent, cComponent, lComponent )
+                , ( hComponent, lComponent, cComponent )
+                ]
+
+            OKLAB ->
+                [ ( lComponent, aComponent, bComponent )
+                , ( lComponent, bComponent, aComponent )
+                , ( aComponent, bComponent, lComponent )
+                ]
+
+            SRGB ->
+                [ ( redComponent, greenComponent, blueComponent )
+                , ( greenComponent, blueComponent, redComponent )
+                , ( blueComponent, redComponent, greenComponent )
+                ]
+          )
+            |> List.map (\( cx, cy, cm ) -> viewSlice model cx cy cm model.current)
+            |> Theme.wrappedRow []
         , viewHorizontalPalette model.current
         , viewPalettes model
         ]
@@ -206,6 +222,7 @@ colorSpaceToString colorSpace =
 type alias Component =
     { get : Oklch -> Float
     , set : Float -> Oklch -> Oklch
+    , min : Float
     , max : Float
     , default : Float
     , component : Vec3
@@ -217,6 +234,7 @@ lComponent : Component
 lComponent =
     { get = .lightness
     , set = \new color -> { color | lightness = new }
+    , min = 0
     , max = 1
     , default = 0.7
     , component = Vector3.vec3 1 0 0
@@ -228,6 +246,7 @@ cComponent : Component
 cComponent =
     { get = .chroma
     , set = \new color -> { color | chroma = new }
+    , min = 0
     , max = 0.37
     , default = 0.1
     , component = Vector3.vec3 0 1 0
@@ -239,11 +258,99 @@ hComponent : Component
 hComponent =
     { get = .hue
     , set = \new color -> { color | hue = new }
+    , min = 0
     , max = 1
     , default = 0
     , component = Vector3.vec3 0 0 1
     , label = "H"
     }
+
+
+aComponent : Component
+aComponent =
+    { get = getOklab .a
+    , set = setOklab (\new color -> { color | a = new })
+    , min = -0.3
+    , max = 0.3
+    , default = 0
+    , component = Vector3.vec3 0 1 0
+    , label = "A"
+    }
+
+
+bComponent : Component
+bComponent =
+    { get = getOklab .b
+    , set = setOklab (\new color -> { color | b = new })
+    , min = -0.3
+    , max = 0.3
+    , default = 0
+    , component = Vector3.vec3 0 0 1
+    , label = "B"
+    }
+
+
+getOklab : (Oklab -> Float) -> Oklch -> Float
+getOklab f c =
+    f (Oklch.toOklab c)
+
+
+setOklab : (Float -> Oklab -> Oklab) -> Float -> Oklch -> Oklch
+setOklab f new color =
+    Oklch.fromOklab (f new (Oklch.toOklab color))
+
+
+redComponent : Component
+redComponent =
+    { get = getsRGB .red
+    , set = setsRGB (\new color -> { color | red = new })
+    , min = 0
+    , max = 1
+    , default = 0
+    , component = Vector3.vec3 1 0 0
+    , label = "R"
+    }
+
+
+greenComponent : Component
+greenComponent =
+    { get = getsRGB .green
+    , set = setsRGB (\new color -> { color | green = new })
+    , min = 0
+    , max = 1
+    , default = 0
+    , component = Vector3.vec3 0 1 0
+    , label = "G"
+    }
+
+
+blueComponent : Component
+blueComponent =
+    { get = getsRGB .blue
+    , set = setsRGB (\new color -> { color | blue = new })
+    , min = 0
+    , max = 1
+    , default = 0
+    , component = Vector3.vec3 0 0 1
+    , label = "B"
+    }
+
+
+getsRGB : ({ red : Float, green : Float, blue : Float, alpha : Float } -> Float) -> Oklch -> Float
+getsRGB f c =
+    f (Color.toRgba (Oklch.toColor c))
+
+
+setsRGB :
+    (Float
+     -> { red : Float, green : Float, blue : Float, alpha : Float }
+     -> { red : Float, green : Float, blue : Float, alpha : Float }
+    )
+    -> Float
+    -> Oklch
+    -> Oklch
+setsRGB f new color =
+    Oklch.toColor color |> Color.toRgba |> f new |> Color.fromRgba |> Oklch.fromColor
 
 
 viewSlice : Model -> Component -> Component -> Component -> Palette -> Html Msg
@@ -312,12 +419,12 @@ viewSlice model xComponent yComponent missingComponent palette =
                         Svg.circle
                             [ Svg.Attributes.cx
                                 (xComponent.get color
-                                    |> project 0 xComponent.max 0 innerWidth
+                                    |> project xComponent.min xComponent.max 0 innerWidth
                                     |> String.fromFloat
                                 )
                             , Svg.Attributes.cy
                                 (yComponent.get color
-                                    |> project 0 yComponent.max innerHeight 0
+                                    |> project yComponent.min yComponent.max innerHeight 0
                                     |> String.fromFloat
                                 )
                             , Svg.Attributes.r "5"
@@ -350,6 +457,42 @@ viewSlice model xComponent yComponent missingComponent palette =
                 ]
                 (axes ++ dots)
 
+        webgl : Html msg
+        webgl =
+            WebGL.toHtml
+                [ Html.Attributes.width outerWidth
+                , Html.Attributes.height outerHeight
+                , Html.Attributes.style "display" "block"
+                ]
+                [ WebGL.entity
+                    vertexShader
+                    fragmentShader
+                    mesh
+                    { componentMatrix = componentMatrix model xComponent yComponent missingComponent palette
+                    , innerHeight = innerHeight
+                    , innerWidth = innerWidth
+                    , padding = padding
+                    }
+                ]
+    in
+    Theme.box
+        [ Html.Attributes.style "position" "relative" ]
+        [ webgl
+        , svg
+        ]
+
+
+componentMatrix : Model -> Component -> Component -> Component -> Palette -> Mat4
+componentMatrix model xComponent yComponent missingComponent palette =
+    let
+        xSpan : Float
+        xSpan =
+            xComponent.max - xComponent.min
+
+        ySpan : Float
+        ySpan =
+            yComponent.max - yComponent.min
+
         missingComponentValue : Float
         missingComponentValue =
             case model.selectedColor of
@@ -367,33 +510,48 @@ viewSlice model xComponent yComponent missingComponent palette =
                         )
                             / toFloat (List.length palette)
 
-        webgl : Html msg
-        webgl =
-            WebGL.toHtml
-                [ Html.Attributes.width outerWidth
-                , Html.Attributes.height outerHeight
-                , Html.Attributes.style "display" "block"
-                ]
-                [ WebGL.entity
-                    vertexShader
-                    fragmentShader
-                    mesh
-                    { componentMatrix =
-                        Matrix4.makeBasis
-                            (Vector3.scale xComponent.max xComponent.component)
-                            (Vector3.scale yComponent.max yComponent.component)
-                            (Vector3.scale missingComponentValue missingComponent.component)
-                    , innerHeight = innerHeight
-                    , innerWidth = innerWidth
-                    , padding = padding
-                    }
-                ]
+        c1 : { x : Float, y : Float, z : Float }
+        c1 =
+            Vector3.toRecord xComponent.component
+
+        c2 : { x : Float, y : Float, z : Float }
+        c2 =
+            Vector3.toRecord yComponent.component
+
+        c3 : { x : Float, y : Float, z : Float }
+        c3 =
+            Vector3.toRecord missingComponent.component
+
+        colorSpaceFloat : number
+        colorSpaceFloat =
+            case model.colorSpace of
+                OKLCH ->
+                    1
+
+                OKLAB ->
+                    2
+
+                SRGB ->
+                    3
     in
-    Theme.box
-        [ Html.Attributes.style "position" "relative" ]
-        [ webgl
-        , svg
-        ]
+    Matrix4.fromRecord
+        { m11 = xSpan * c1.x
+        , m12 = ySpan * c2.x
+        , m13 = missingComponentValue * c3.x
+        , m14 = c1.x * xComponent.min + c2.x * yComponent.min
+        , m21 = xSpan * c1.y
+        , m22 = ySpan * c2.y
+        , m23 = missingComponentValue * c3.y
+        , m24 = c1.y * xComponent.min + c2.y * yComponent.min
+        , m31 = xSpan * c1.z
+        , m32 = ySpan * c2.z
+        , m33 = missingComponentValue * c3.z
+        , m34 = c1.z * xComponent.min + c2.z * yComponent.min
+        , m41 = 0
+        , m42 = 0
+        , m43 = 0
+        , m44 = colorSpaceFloat
+        }
 
 
 type alias Vertex =
@@ -474,7 +632,7 @@ fragmentShader =
             return lmsToLinearRGB * lms;
         }
 
-        vec3 oklchToLab(vec3 oklch) {
+        vec3 oklchToOkLab(vec3 oklch) {
             return vec3(
                 oklch.x,
                 oklch.y * cos(oklch.z * 6.28318531),
@@ -484,16 +642,27 @@ fragmentShader =
 
         void main () {
             vec2 projected = (gl_FragCoord.xy - vec2(padding, padding)) / vec2(innerWidth, innerHeight);
-            if(projected.x < 0. || projected.y < 0. || projected.x > 1. || projected.y > 1.) {
-                gl_FragColor = vec4(0,0,0,1);
-            }
-            else {
-                vec3 oklch = (componentMatrix * vec4(projected, 1, 1)).xyz;
-                vec3 lab = oklchToLab(oklch);
-                vec3 linearRGB = labToLinearRGB(lab);
-                vec3 sRGB = linearRGBToSRGB(linearRGB);
-                vec3 clamped = clamp(sRGB, 0., 1.);
+            if (clamp(projected, 0., 1.) == projected) {
+                vec4 components = componentMatrix * vec4(projected, 1, 1);
+                vec3 sRGB;
+                if (components.w == 1.) {
+                    vec3 oklch = components.xyz;
+                    vec3 oklab = oklchToOkLab(oklch);
+                    vec3 linearRGB = labToLinearRGB(oklab);
+                    sRGB = linearRGBToSRGB(linearRGB);
+                } else if (components.w == 2.) {
+                    vec3 oklab = components.xyz;
+                    vec3 linearRGB = labToLinearRGB(oklab);
+                    sRGB = linearRGBToSRGB(linearRGB);
+                } else if (components.w == 3.) {
+                    sRGB = components.xyz;
+                } else {
+                    sRGB = vec3(1, 0, 1);
+                }
+                vec3 clamped = clamp(sRGB, -0.00001, 1.00001);
                 gl_FragColor = (clamped == sRGB) ? vec4(sRGB, 1) : vec4(0,0,0,1);
+            } else {
+                gl_FragColor = vec4(0,0,0,1);
             }
         }
     |]
