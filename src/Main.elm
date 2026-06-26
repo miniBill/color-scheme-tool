@@ -642,9 +642,9 @@ fragmentShader =
 
         void main () {
             vec2 projected = (gl_FragCoord.xy - vec2(padding, padding)) / vec2(innerWidth, innerHeight);
+            vec3 sRGB = vec3(0);
             if (clamp(projected, 0., 1.) == projected) {
                 vec4 components = componentMatrix * vec4(projected, 1, 1);
-                vec3 sRGB;
                 if (components.w == 1.) {
                     vec3 oklch = components.xyz;
                     vec3 oklab = oklchToOkLab(oklch);
@@ -656,14 +656,10 @@ fragmentShader =
                     sRGB = linearRGBToSRGB(linearRGB);
                 } else if (components.w == 3.) {
                     sRGB = components.xyz;
-                } else {
-                    sRGB = vec3(1, 0, 1);
                 }
-                vec3 clamped = clamp(sRGB, -0.00001, 1.00001);
-                gl_FragColor = (clamped == sRGB) ? vec4(sRGB, 1) : vec4(0,0,0,1);
-            } else {
-                gl_FragColor = vec4(0,0,0,1);
             }
+            vec3 clamped = clamp(sRGB, -0.00001, 1.00001);
+            gl_FragColor = (clamped == sRGB) ? vec4(sRGB, 1) : vec4(0,0,0,1);
         }
     |]
 
