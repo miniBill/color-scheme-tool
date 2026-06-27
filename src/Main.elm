@@ -45,6 +45,8 @@ type ColorSpace
     = OKLCH
     | OKLAB
     | SRGB
+    | HSL
+    | HSV
 
 
 main : Program () Model Msg
@@ -167,31 +169,49 @@ view : Model -> Html Msg
 view model =
     Theme.column
         [ Theme.padding ]
-        [ [ OKLCH, OKLAB, SRGB ]
+        [ [ OKLCH, OKLAB, SRGB, HSL, HSV ]
             |> List.map
                 (\colorSpace ->
                     Html.button
-                        [ Html.Events.onClick (ColorSpace colorSpace) ]
+                        [ Html.Events.onClick (ColorSpace colorSpace)
+                        , if colorSpace == model.colorSpace then
+                            Html.Attributes.style "box-shadow" "0 0 4px 4px rgba(0, 149, 255, 0.5)"
+
+                          else
+                            Html.Attributes.style "" ""
+                        ]
                         [ Html.text (colorSpaceToString colorSpace) ]
                 )
             |> Theme.wrappedRow []
         , (case model.colorSpace of
             OKLCH ->
-                [ ( lComponent, cComponent, hComponent )
-                , ( hComponent, cComponent, lComponent )
-                , ( hComponent, lComponent, cComponent )
+                [ ( oklchComponents.l, oklchComponents.c, oklchComponents.h )
+                , ( oklchComponents.h, oklchComponents.c, oklchComponents.l )
+                , ( oklchComponents.h, oklchComponents.l, oklchComponents.c )
                 ]
 
             OKLAB ->
-                [ ( lComponent, aComponent, bComponent )
-                , ( lComponent, bComponent, aComponent )
-                , ( aComponent, bComponent, lComponent )
+                [ ( oklabComponents.l, oklabComponents.a, oklabComponents.b )
+                , ( oklabComponents.l, oklabComponents.b, oklabComponents.a )
+                , ( oklabComponents.a, oklabComponents.b, oklabComponents.l )
                 ]
 
             SRGB ->
-                [ ( redComponent, greenComponent, blueComponent )
-                , ( greenComponent, blueComponent, redComponent )
-                , ( blueComponent, redComponent, greenComponent )
+                [ ( rgbComponents.r, rgbComponents.g, rgbComponents.b )
+                , ( rgbComponents.g, rgbComponents.b, rgbComponents.r )
+                , ( rgbComponents.b, rgbComponents.r, rgbComponents.g )
+                ]
+
+            HSL ->
+                [ ( hslComponents.l, hslComponents.s, hslComponents.h )
+                , ( hslComponents.h, hslComponents.s, hslComponents.l )
+                , ( hslComponents.h, hslComponents.l, hslComponents.s )
+                ]
+
+            HSV ->
+                [ ( hsvComponents.v, hsvComponents.s, hsvComponents.h )
+                , ( hsvComponents.h, hsvComponents.s, hsvComponents.v )
+                , ( hsvComponents.h, hsvComponents.v, hsvComponents.s )
                 ]
           )
             |> List.map (\( cx, cy, cm ) -> viewSlice model cx cy cm model.current)
@@ -218,6 +238,12 @@ colorSpaceToString colorSpace =
         SRGB ->
             "sRGB"
 
+        HSL ->
+            "HSL"
+
+        HSV ->
+            "HSV"
+
 
 type alias Component =
     { get : Oklch -> Float
@@ -230,127 +256,242 @@ type alias Component =
     }
 
 
-lComponent : Component
-lComponent =
-    { get = .lightness
-    , set = \new color -> { color | lightness = new }
-    , min = 0
-    , max = 1
-    , default = 0.7
-    , component = Vector3.vec3 1 0 0
-    , label = "L"
+oklchComponents : { l : Component, c : Component, h : Component }
+oklchComponents =
+    { l =
+        { get = .lightness
+        , set = \new color -> { color | lightness = new }
+        , min = 0
+        , max = 1
+        , default = 0.7
+        , component = Vector3.vec3 1 0 0
+        , label = "L"
+        }
+    , c =
+        { get = .chroma
+        , set = \new color -> { color | chroma = new }
+        , min = 0
+        , max = 0.37
+        , default = 0.1
+        , component = Vector3.vec3 0 1 0
+        , label = "C"
+        }
+    , h =
+        { get = .hue
+        , set = \new color -> { color | hue = new }
+        , min = 0
+        , max = 1
+        , default = 0
+        , component = Vector3.vec3 0 0 1
+        , label = "H"
+        }
     }
 
 
-cComponent : Component
-cComponent =
-    { get = .chroma
-    , set = \new color -> { color | chroma = new }
-    , min = 0
-    , max = 0.37
-    , default = 0.1
-    , component = Vector3.vec3 0 1 0
-    , label = "C"
+oklabComponents : { l : Component, a : Component, b : Component }
+oklabComponents =
+    let
+        getOklab : (Oklab -> Float) -> Oklch -> Float
+        getOklab f c =
+            f (Oklch.toOklab c)
+
+        setOklab : (Float -> Oklab -> Oklab) -> Float -> Oklch -> Oklch
+        setOklab f new color =
+            Oklch.fromOklab (f new (Oklch.toOklab color))
+    in
+    { l =
+        { get = getOklab .lightness
+        , set = setOklab (\new color -> { color | lightness = new })
+        , min = 0
+        , max = 1
+        , default = 0.7
+        , component = Vector3.vec3 1 0 0
+        , label = "L"
+        }
+    , a =
+        { get = getOklab .a
+        , set = setOklab (\new color -> { color | a = new })
+        , min = -0.3
+        , max = 0.3
+        , default = 0
+        , component = Vector3.vec3 0 1 0
+        , label = "A"
+        }
+    , b =
+        { get = getOklab .b
+        , set = setOklab (\new color -> { color | b = new })
+        , min = -0.3
+        , max = 0.3
+        , default = 0
+        , component = Vector3.vec3 0 0 1
+        , label = "B"
+        }
     }
 
 
-hComponent : Component
-hComponent =
-    { get = .hue
-    , set = \new color -> { color | hue = new }
-    , min = 0
-    , max = 1
-    , default = 0
-    , component = Vector3.vec3 0 0 1
-    , label = "H"
+rgbComponents : { r : Component, g : Component, b : Component }
+rgbComponents =
+    let
+        getsRGB : ({ red : Float, green : Float, blue : Float, alpha : Float } -> Float) -> Oklch -> Float
+        getsRGB f c =
+            c
+                |> Oklch.toColor
+                |> Color.toRgba
+                |> f
+
+        setsRGB :
+            (Float
+             -> { red : Float, green : Float, blue : Float, alpha : Float }
+             -> { red : Float, green : Float, blue : Float, alpha : Float }
+            )
+            -> Float
+            -> Oklch
+            -> Oklch
+        setsRGB f new color =
+            Oklch.toColor color
+                |> Color.toRgba
+                |> f new
+                |> Color.fromRgba
+                |> Oklch.fromColor
+    in
+    { r =
+        { get = getsRGB .red
+        , set = setsRGB (\new color -> { color | red = new })
+        , min = 0
+        , max = 1
+        , default = 0
+        , component = Vector3.vec3 1 0 0
+        , label = "R"
+        }
+    , g =
+        { get = getsRGB .green
+        , set = setsRGB (\new color -> { color | green = new })
+        , min = 0
+        , max = 1
+        , default = 0
+        , component = Vector3.vec3 0 1 0
+        , label = "G"
+        }
+    , b =
+        { get = getsRGB .green
+        , set = setsRGB (\new color -> { color | green = new })
+        , min = 0
+        , max = 1
+        , default = 0
+        , component = Vector3.vec3 0 1 0
+        , label = "G"
+        }
     }
 
 
-aComponent : Component
-aComponent =
-    { get = getOklab .a
-    , set = setOklab (\new color -> { color | a = new })
-    , min = -0.3
-    , max = 0.3
-    , default = 0
-    , component = Vector3.vec3 0 1 0
-    , label = "A"
+hslComponents : { h : Component, s : Component, l : Component }
+hslComponents =
+    { h =
+        { get = getHSL .hue
+        , set = setHSL (\new color -> { color | hue = new })
+        , min = 0
+        , max = 1
+        , default = 0
+        , component = Vector3.vec3 1 0 0
+        , label = "H"
+        }
+    , s =
+        { get = getHSL .saturation
+        , set = setHSL (\new color -> { color | saturation = new })
+        , min = 0
+        , max = 1
+        , default = 0.7
+        , component = Vector3.vec3 0 1 0
+        , label = "S"
+        }
+    , l =
+        { get = getHSL .lightness
+        , set = setHSL (\new color -> { color | lightness = new })
+        , min = 0
+        , max = 1
+        , default = 0.5
+        , component = Vector3.vec3 0 0 1
+        , label = "L"
+        }
     }
 
 
-bComponent : Component
-bComponent =
-    { get = getOklab .b
-    , set = setOklab (\new color -> { color | b = new })
-    , min = -0.3
-    , max = 0.3
-    , default = 0
-    , component = Vector3.vec3 0 0 1
-    , label = "B"
-    }
+getHSL : ({ hue : Float, saturation : Float, lightness : Float, alpha : Float } -> Float) -> Oklch -> Float
+getHSL f c =
+    c
+        |> Oklch.toColor
+        |> Color.toHsla
+        |> f
 
 
-getOklab : (Oklab -> Float) -> Oklch -> Float
-getOklab f c =
-    f (Oklch.toOklab c)
-
-
-setOklab : (Float -> Oklab -> Oklab) -> Float -> Oklch -> Oklch
-setOklab f new color =
-    Oklch.fromOklab (f new (Oklch.toOklab color))
-
-
-redComponent : Component
-redComponent =
-    { get = getsRGB .red
-    , set = setsRGB (\new color -> { color | red = new })
-    , min = 0
-    , max = 1
-    , default = 0
-    , component = Vector3.vec3 1 0 0
-    , label = "R"
-    }
-
-
-greenComponent : Component
-greenComponent =
-    { get = getsRGB .green
-    , set = setsRGB (\new color -> { color | green = new })
-    , min = 0
-    , max = 1
-    , default = 0
-    , component = Vector3.vec3 0 1 0
-    , label = "G"
-    }
-
-
-blueComponent : Component
-blueComponent =
-    { get = getsRGB .blue
-    , set = setsRGB (\new color -> { color | blue = new })
-    , min = 0
-    , max = 1
-    , default = 0
-    , component = Vector3.vec3 0 0 1
-    , label = "B"
-    }
-
-
-getsRGB : ({ red : Float, green : Float, blue : Float, alpha : Float } -> Float) -> Oklch -> Float
-getsRGB f c =
-    f (Color.toRgba (Oklch.toColor c))
-
-
-setsRGB :
+setHSL :
     (Float
-     -> { red : Float, green : Float, blue : Float, alpha : Float }
-     -> { red : Float, green : Float, blue : Float, alpha : Float }
+     -> { hue : Float, saturation : Float, lightness : Float, alpha : Float }
+     -> { hue : Float, saturation : Float, lightness : Float, alpha : Float }
     )
     -> Float
     -> Oklch
     -> Oklch
-setsRGB f new color =
-    Oklch.toColor color |> Color.toRgba |> f new |> Color.fromRgba |> Oklch.fromColor
+setHSL f new color =
+    Oklch.toColor color |> Color.toHsla |> f new |> Color.fromHsla |> Oklch.fromColor
+
+
+hsvComponents : { h : Component, s : Component, v : Component }
+hsvComponents =
+    { h =
+        { get = getHSV .hue
+        , set = setHSV (\new color -> { color | hue = new })
+        , min = 0
+        , max = 1
+        , default = 0
+        , component = Vector3.vec3 1 0 0
+        , label = "H"
+        }
+    , s =
+        { get = getHSV .saturation
+        , set = setHSV (\new color -> { color | saturation = new })
+        , min = 0
+        , max = 1
+        , default = 0.7
+        , component = Vector3.vec3 0 1 0
+        , label = "S"
+        }
+    , v =
+        { get = getHSV .value
+        , set = setHSV (\new color -> { color | value = new })
+        , min = 0
+        , max = 1
+        , default = 1
+        , component = Vector3.vec3 0 0 1
+        , label = "V"
+        }
+    }
+
+
+getHSV : ({ hue : Float, saturation : Float, value : Float, alpha : Float } -> Float) -> Oklch -> Float
+getHSV f c =
+    Oklch.toColor c
+        |> Color.toHsla
+        |> hslToHsv
+        |> f
+
+
+setHSV :
+    (Float
+     -> { hue : Float, saturation : Float, value : Float, alpha : Float }
+     -> { hue : Float, saturation : Float, value : Float, alpha : Float }
+    )
+    -> Float
+    -> Oklch
+    -> Oklch
+setHSV f new color =
+    Oklch.toColor color
+        |> Color.toHsla
+        |> hslToHsv
+        |> f new
+        |> hsvToHsl
+        |> Color.fromHsla
+        |> Oklch.fromColor
 
 
 viewSlice : Model -> Component -> Component -> Component -> Palette -> Html Msg
@@ -533,6 +674,12 @@ componentMatrix model xComponent yComponent missingComponent palette =
 
                 SRGB ->
                     3
+
+                HSL ->
+                    4
+
+                HSV ->
+                    5
     in
     Matrix4.fromRecord
         { m11 = xSpan * c1.x
@@ -640,6 +787,50 @@ fragmentShader =
             );
         }
 
+        float hueToRgb(float m1, float m2, float h) {
+            h = mod(h, 1.);
+
+            if (h * 6. < 1.) {
+                return m1 + (m2 - m1) * h * 6.;
+            } else if (h * 2. < 1.) {
+                return m2;
+            } else if (h * 3. < 2.) {
+                return m1 + (m2 - m1) * (2. / 3. - h) * 6.;
+            } else {
+                return m1;
+            } 
+        }
+
+        vec3 hslToSRGB(vec3 hsl) {
+            float h = hsl.x;
+            float s = hsl.y;
+            float l = hsl.z;
+
+            float m2 =
+                l <= 0.5
+                    ? l * (s + 1.)
+                    : l + s - l * s;
+            float m1 = l * 2. - m2;
+
+            float r = hueToRgb(m1, m2, h + 1. / 3.);
+            float g = hueToRgb(m1, m2, h);
+            float b = hueToRgb(m1, m2, h - 1. / 3.);
+
+            return vec3(r, g, b);
+        }
+
+        vec3 hsvToHsl(vec3 hsv) {
+            hsv = clamp(hsv, 0., 1.);
+            float h = hsv.x;
+            float s = hsv.y;
+            float v = hsv.z;
+
+            float l = v * (1. - s / 2.);
+            float s_ = (l == 0. || l == 1.) ? 0. : ((v - l) / min(l, 1. - l));
+
+            return vec3(h, s_, l);
+        }
+
         void main () {
             vec2 projected = (gl_FragCoord.xy - vec2(padding, padding)) / vec2(innerWidth, innerHeight);
             vec3 sRGB = vec3(0);
@@ -656,10 +847,34 @@ fragmentShader =
                     sRGB = linearRGBToSRGB(linearRGB);
                 } else if (components.w == 3.) {
                     sRGB = components.xyz;
+                } else if (components.w == 4.) {
+                    vec3 hsl = components.xyz;
+                    sRGB = hslToSRGB(hsl);
+                } else if (components.w == 5.) {
+                    vec3 hsv = components.xyz;
+                    vec3 hsl = hsvToHsl(hsv);
+                    sRGB = hslToSRGB(hsl);
                 }
             }
-            vec3 clamped = clamp(sRGB, -0.00001, 1.00001);
+            vec3 clamped = clamp(sRGB, -0.0001, 1.0001);
             gl_FragColor = (clamped == sRGB) ? vec4(sRGB, 1) : vec4(0,0,0,1);
+            if(clamped != sRGB) {
+                if(sRGB.x < -0.0001) {
+                    gl_FragColor = vec4(1,0,0,1);
+                } else if (sRGB.x > 1.0001) {
+                    gl_FragColor = vec4(0,1,1,1);
+                } else if (sRGB.y < -0.0001) {
+                    gl_FragColor = vec4(0,1,0,1);
+                } else if (sRGB.y > 1.0001) {
+                    gl_FragColor = vec4(1,0,1,1);
+                } else if (sRGB.z < -0.0001) {
+                    gl_FragColor = vec4(0,0,1,1);
+                } else if (sRGB.z > 1.0001) {
+                    gl_FragColor = vec4(1,1,0,1);
+                } else {
+                    gl_FragColor = vec4(1);
+                }
+            }
         }
     |]
 
@@ -723,12 +938,12 @@ viewPalette { selected } colorSpace palette =
         columns =
             [ ( [ "color" ], "24px" )
             , ( [], "8px" )
-            , ( [ "oklch", "oklab", "rgb" ], "auto" )
-            , ( [ "l", "r" ], "auto" )
+            , ( [ "oklch", "oklab", "rgb", "name" ], "auto" )
+            , ( [ "l", "r", "first" ], "auto" )
             , ( [], "8px" )
-            , ( [ "c", "a", "g" ], "auto" )
+            , ( [ "c", "a", "g", "second" ], "auto" )
             , ( [], "8px" )
-            , ( [ "h", "b" ], "auto" )
+            , ( [ "h", "b", "third" ], "auto" )
             , ( [], "16px" )
             ]
 
@@ -799,7 +1014,7 @@ viewPalette { selected } colorSpace palette =
                             Html.span [ Html.Attributes.style "font-weight" "bold" ] [ Html.text label ]
                         )
                         [ "Component", "Min", "Max", "Range" ]
-                        ++ List.concatMap componentInfo [ lComponent, cComponent, hComponent ]
+                        ++ List.concatMap componentInfo [ oklchComponents.l, oklchComponents.c, oklchComponents.h ]
                     )
                 , Html.div
                     [ spanColumns ]
@@ -959,8 +1174,109 @@ viewColor { selected } colorSpace color =
                     [ Html.text (Round.round 0 (rgb.blue * 100) ++ "%)") ]
                 ]
 
+            HSL ->
+                let
+                    hsl : { hue : Float, saturation : Float, lightness : Float, alpha : Float }
+                    hsl =
+                        color
+                            |> Oklch.toColor
+                            |> Color.toHsla
+                in
+                [ colorDiv color
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "rgb" ]
+                    [ Html.text "hsl(" ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "r"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (hsl.hue * 360) ++ "deg ") ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "g"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (hsl.saturation * 100) ++ "% ") ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "b"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (hsl.lightness * 100) ++ "%)") ]
+                ]
+
+            HSV ->
+                let
+                    hsv : { hue : Float, saturation : Float, value : Float, alpha : Float }
+                    hsv =
+                        color
+                            |> Oklch.toColor
+                            |> Color.toHsla
+                            |> hslToHsv
+                in
+                [ colorDiv color
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "rgb" ]
+                    [ Html.text "hsv(" ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "r"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (hsv.hue * 360) ++ "deg ") ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "g"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (hsv.saturation * 100) ++ "% ") ]
+                , Html.span
+                    [ Html.Attributes.style "grid-column" "b"
+                    , Html.Attributes.style "justify-self" "right"
+                    ]
+                    [ Html.text (Round.round 0 (hsv.value * 100) ++ "%)") ]
+                ]
+
     else
         [ colorDiv color ]
+
+
+hslToHsv :
+    { hue : Float, saturation : Float, lightness : Float, alpha : Float }
+    -> { hue : Float, saturation : Float, value : Float, alpha : Float }
+hslToHsv hsl =
+    let
+        v : Float
+        v =
+            hsl.lightness + hsl.saturation * min hsl.lightness (1 - hsl.lightness)
+    in
+    { hue = hsl.hue
+    , saturation =
+        if v == 0 then
+            0
+
+        else
+            2 - 2 * hsl.lightness / v
+    , value = v
+    , alpha = hsl.alpha
+    }
+
+
+hsvToHsl :
+    { hue : Float, saturation : Float, value : Float, alpha : Float }
+    -> { hue : Float, saturation : Float, lightness : Float, alpha : Float }
+hsvToHsl hsv =
+    let
+        l : Float
+        l =
+            hsv.value * (1 - hsv.saturation / 2)
+    in
+    { hue = hsv.hue
+    , saturation =
+        if l == 0 || l == 1 then
+            0
+
+        else
+            (hsv.value - l) / min l (1 - l)
+    , lightness = l
+    , alpha = hsv.alpha
+    }
 
 
 colorDiv : Oklch -> Html msg
