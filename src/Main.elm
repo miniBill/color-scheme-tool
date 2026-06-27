@@ -32,6 +32,7 @@ type alias Palette =
 type alias Model =
     { current : Palette
     , selectedColor : Maybe Oklch
+    , hoveredColor : Maybe Oklch
     , colorSpace : ColorSpace
     }
 
@@ -39,6 +40,7 @@ type alias Model =
 type Msg
     = Palette Palette
     | ColorSpace ColorSpace
+    | HoverColor (Maybe Oklch)
     | SelectColor Oklch
 
 
@@ -68,6 +70,7 @@ init =
 
     -- |> List.sortBy .hue
     , selectedColor = Nothing
+    , hoveredColor = Nothing
     , colorSpace = OKLCH
     }
 
@@ -217,14 +220,16 @@ view model =
           )
             |> List.map (\( cx, cy, cm ) -> viewSlice model cx cy cm model.current)
             |> Theme.wrappedRow []
-        , viewHorizontalPalette model.current
+        , viewHorizontalPalette model
         , viewPalettes model
         ]
 
 
-viewHorizontalPalette : Palette -> Html Msg
-viewHorizontalPalette palette =
-    palette |> List.map colorDiv |> Theme.wrappedRow []
+viewHorizontalPalette : Model -> Html Msg
+viewHorizontalPalette model =
+    model.current
+        |> List.map (colorDiv model)
+        |> Theme.wrappedRow []
 
 
 colorSpaceToString : ColorSpace -> String
@@ -578,6 +583,8 @@ viewSlice model xComponent yComponent missingComponent palette =
 
                               else
                                 Svg.Attributes.stroke "black"
+                            , Svg.Events.onMouseOver (HoverColor (Just color))
+                            , Svg.Events.onMouseOut (HoverColor Nothing)
                             , Svg.Events.onClick (SelectColor color)
                             , Svg.Attributes.cursor "pointer"
                             ]
@@ -637,20 +644,25 @@ componentMatrix model xComponent yComponent missingComponent palette =
 
         missingComponentValue : Float
         missingComponentValue =
-            case model.selectedColor of
+            case model.hoveredColor of
                 Just color ->
                     missingComponent.get color
 
                 Nothing ->
-                    if List.isEmpty palette then
-                        missingComponent.default
+                    case model.selectedColor of
+                        Just color ->
+                            missingComponent.get color
 
-                    else
-                        (palette
-                            |> List.map missingComponent.get
-                            |> List.sum
-                        )
-                            / toFloat (List.length palette)
+                        Nothing ->
+                            if List.isEmpty palette then
+                                missingComponent.default
+
+                            else
+                                (palette
+                                    |> List.map missingComponent.get
+                                    |> List.sum
+                                )
+                                    / toFloat (List.length palette)
 
         c1 : { x : Float, y : Float, z : Float }
         c1 =
@@ -902,13 +914,13 @@ viewPalettes model =
     )
         |> List.map
             (\palette ->
-                viewPalette { selected = model.current == palette } model.colorSpace palette
+                viewPalette model { selected = model.current == palette } model.colorSpace palette
             )
         |> Theme.wrappedRow [ Html.Attributes.style "align-items" "start" ]
 
 
-viewPalette : { selected : Bool } -> ColorSpace -> Palette -> Html Msg
-viewPalette { selected } colorSpace palette =
+viewPalette : Model -> { selected : Bool } -> ColorSpace -> Palette -> Html Msg
+viewPalette model { selected } colorSpace palette =
     let
         attrs : List (Attribute Msg)
         attrs =
@@ -924,7 +936,7 @@ viewPalette { selected } colorSpace palette =
         selectionAttrs : List (Attribute Msg)
         selectionAttrs =
             if selected then
-                [ Html.Attributes.style "box-shadow" "0px 0px 4px 4px #ccf"
+                [ Html.Attributes.style "box-shadow" "0px 0px 4px 4px rgba(0, 149, 255, 0.5)"
                 , Html.Attributes.style "background" "#f0f0ff"
                 , gridTemplate Column columns
                 ]
@@ -953,13 +965,13 @@ viewPalette { selected } colorSpace palette =
             palette
                 |> List.indexedMap
                     (\i color ->
-                        viewColor { selected = selected } colorSpace color
-                            |> List.map
-                                (Html.map
-                                    (\newColor ->
-                                        Palette (List.Extra.setAt i newColor palette)
-                                    )
-                                )
+                        viewColor model { selected = selected } colorSpace color
+                     -- |> List.map
+                     --     (Html.map
+                     --         (\newColor ->
+                     --             Palette (List.Extra.setAt i newColor palette)
+                     --         )
+                     --     )
                     )
                 |> List.concat
 
@@ -997,9 +1009,9 @@ viewPalette { selected } colorSpace palette =
                                         [ Html.text "ΔE"
                                         , Html.sub [] [ Html.text "ITP" ]
                                         , Html.text "( "
-                                        , colorDiv ca
+                                        , colorDiv model ca
                                         , Html.text " , "
-                                        , colorDiv cb
+                                        , colorDiv model cb
                                         , Html.text (" ) = " ++ Round.round 3 delta)
                                         ]
                                 )
@@ -1188,12 +1200,12 @@ gridTemplate axis others =
     Html.Attributes.style ("grid-template-" ++ axisString) (String.join " " pieces)
 
 
-viewColor : { selected : Bool } -> ColorSpace -> Oklch -> List (Html Oklch)
-viewColor { selected } colorSpace color =
+viewColor : Model -> { selected : Bool } -> ColorSpace -> Oklch -> List (Html Msg)
+viewColor model { selected } colorSpace color =
     if selected then
         case colorSpace of
             OKLCH ->
-                [ colorDiv color
+                [ colorDiv model color
                 , Html.span
                     [ Html.Attributes.style "grid-column" "oklch" ]
                     [ Html.text "oklch(" ]
@@ -1220,7 +1232,7 @@ viewColor { selected } colorSpace color =
                     oklab =
                         Oklch.toOklab color
                 in
-                [ colorDiv color
+                [ colorDiv model color
                 , Html.span
                     [ Html.Attributes.style "grid-column" "oklab" ]
                     [ Html.text "oklab(" ]
@@ -1249,7 +1261,7 @@ viewColor { selected } colorSpace color =
                             |> Oklch.toColor
                             |> Color.toRgba
                 in
-                [ colorDiv color
+                [ colorDiv model color
                 , Html.span
                     [ Html.Attributes.style "grid-column" "rgb" ]
                     [ Html.text "rgb(" ]
@@ -1278,7 +1290,7 @@ viewColor { selected } colorSpace color =
                             |> Oklch.toColor
                             |> Color.toHsla
                 in
-                [ colorDiv color
+                [ colorDiv model color
                 , Html.span
                     [ Html.Attributes.style "grid-column" "rgb" ]
                     [ Html.text "hsl(" ]
@@ -1308,7 +1320,7 @@ viewColor { selected } colorSpace color =
                             |> Color.toHsla
                             |> hslToHsv
                 in
-                [ colorDiv color
+                [ colorDiv model color
                 , Html.span
                     [ Html.Attributes.style "grid-column" "rgb" ]
                     [ Html.text "hsv(" ]
@@ -1330,7 +1342,7 @@ viewColor { selected } colorSpace color =
                 ]
 
     else
-        [ colorDiv color ]
+        [ colorDiv model color ]
 
 
 hslToHsv :
@@ -1375,14 +1387,32 @@ hsvToHsl hsv =
     }
 
 
-colorDiv : Oklch -> Html msg
-colorDiv color =
+colorDiv : Model -> Oklch -> Html Msg
+colorDiv model color =
     Html.div
         [ Html.Attributes.style "background-color" (Oklch.toCssString color)
         , Html.Attributes.style "grid-column" "color"
         , Html.Attributes.style "width" "24px"
         , Html.Attributes.style "height" "24px"
         , Html.Attributes.style "display" "inline-block"
+        , Html.Attributes.title
+            ("oklch("
+                ++ Round.round 0 (color.lightness * 100)
+                ++ "% "
+                ++ Round.round 3 color.chroma
+                ++ " "
+                ++ Round.round 3 (360 * color.hue)
+                ++ ")"
+            )
+        , Html.Events.onMouseEnter (HoverColor (Just color))
+        , Html.Events.onMouseLeave (HoverColor Nothing)
+        , Html.Events.onClick (SelectColor color)
+        , if model.selectedColor == Just color then
+            Html.Attributes.style "box-shadow" "0 0 2px 2px rgba(0, 141, 180, 0.63)"
+
+          else
+            Html.Attributes.style "box-shadow" "initial"
+        , Html.Attributes.style "cursor" "pointer"
         ]
         []
 
@@ -1395,6 +1425,9 @@ update msg model =
 
         ColorSpace colorSpace ->
             { model | colorSpace = colorSpace }
+
+        HoverColor color ->
+            { model | hoveredColor = color }
 
         SelectColor color ->
             if Just color == model.selectedColor then
