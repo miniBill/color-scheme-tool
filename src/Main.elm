@@ -373,13 +373,13 @@ rgbComponents =
         , label = "G"
         }
     , b =
-        { get = getsRGB .green
-        , set = setsRGB (\new color -> { color | green = new })
+        { get = getsRGB .blue
+        , set = setsRGB (\new color -> { color | blue = new })
         , min = 0
         , max = 1
         , default = 0
-        , component = Vector3.vec3 0 1 0
-        , label = "G"
+        , component = Vector3.vec3 0 0 1
+        , label = "B"
         }
     }
 
@@ -858,23 +858,23 @@ fragmentShader =
             }
             vec3 clamped = clamp(sRGB, -0.0001, 1.0001);
             gl_FragColor = (clamped == sRGB) ? vec4(sRGB, 1) : vec4(0,0,0,1);
-            if(clamped != sRGB) {
-                if(sRGB.x < -0.0001) {
-                    gl_FragColor = vec4(1,0,0,1);
-                } else if (sRGB.x > 1.0001) {
-                    gl_FragColor = vec4(0,1,1,1);
-                } else if (sRGB.y < -0.0001) {
-                    gl_FragColor = vec4(0,1,0,1);
-                } else if (sRGB.y > 1.0001) {
-                    gl_FragColor = vec4(1,0,1,1);
-                } else if (sRGB.z < -0.0001) {
-                    gl_FragColor = vec4(0,0,1,1);
-                } else if (sRGB.z > 1.0001) {
-                    gl_FragColor = vec4(1,1,0,1);
-                } else {
-                    gl_FragColor = vec4(1);
-                }
-            }
+            //if(clamped != sRGB) {
+            //    if(sRGB.x < -0.0001) {
+            //        gl_FragColor = vec4(1,0,0,1);
+            //    } else if (sRGB.x > 1.0001) {
+            //        gl_FragColor = vec4(0,1,1,1);
+            //    } else if (sRGB.y < -0.0001) {
+            //        gl_FragColor = vec4(0,1,0,1);
+            //    } else if (sRGB.y > 1.0001) {
+            //        gl_FragColor = vec4(1,0,1,1);
+            //    } else if (sRGB.z < -0.0001) {
+            //        gl_FragColor = vec4(0,0,1,1);
+            //    } else if (sRGB.z > 1.0001) {
+            //        gl_FragColor = vec4(1,1,0,1);
+            //    } else {
+            //        gl_FragColor = vec4(1);
+            //    }
+            //}
         }
     |]
 
