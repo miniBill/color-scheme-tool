@@ -1,4 +1,4 @@
-module Theme exposing (box, column, padding, wrappedRow)
+module Theme exposing (box, column, gap, padding, wrappedRow)
 
 import Html exposing (Attribute, Html)
 import Html.Attributes

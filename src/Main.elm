@@ -3,6 +3,7 @@ module Main exposing (ColorSpace, Model, Msg, Palette, main)
 import Brewer
 import Browser
 import Color
+import Color.LinearRGB exposing (LinearRGB)
 import Color.Oklab as Oklab exposing (Oklab)
 import Color.Oklch as Oklch exposing (Oklch)
 import FathersDay
@@ -971,32 +972,37 @@ viewPalette { selected } colorSpace palette =
                         Html.Attributes.style "grid-column"
                             ("1 / span " ++ String.fromInt (List.length columns))
 
-                    minDelta : List (Html Msg)
-                    minDelta =
+                    minDeltas : List (Html Msg)
+                    minDeltas =
                         palette
-                            |> List.map Oklch.toOklab
+                            |> List.map (\c -> ( c, toITP c ))
                             |> List.Extra.uniquePairs
                             |> List.map
-                                (\( ca, cb ) ->
-                                    ( sqrt
-                                        (((ca.a - cb.a) ^ 2)
-                                            + ((ca.b - cb.b) ^ 2)
-                                            + ((ca.lightness - cb.lightness) ^ 2)
-                                        )
+                                (\( ( ca, itpA ), ( cb, itpB ) ) ->
+                                    ( 720
+                                        * sqrt
+                                            (((itpA.i - itpB.i) ^ 2)
+                                                + ((itpA.t - itpB.t) ^ 2)
+                                                + ((itpA.p - itpB.p) ^ 2)
+                                            )
                                     , ca
                                     , cb
                                     )
                                 )
-                            |> List.Extra.minimumBy Triple.Extra.first
-                            |> Maybe.map
+                            |> List.sortBy Triple.Extra.first
+                            |> List.take 3
+                            |> List.map
                                 (\( delta, ca, cb ) ->
-                                    [ Html.text (Round.round 3 delta ++ " between ")
-                                    , colorDiv (Oklch.fromOklab ca)
-                                    , Html.text " and "
-                                    , colorDiv (Oklch.fromOklab cb)
-                                    ]
+                                    Html.div []
+                                        [ Html.text "ΔE"
+                                        , Html.sub [] [ Html.text "ITP" ]
+                                        , Html.text "( "
+                                        , colorDiv ca
+                                        , Html.text " , "
+                                        , colorDiv cb
+                                        , Html.text (" ) = " ++ Round.round 3 delta)
+                                        ]
                                 )
-                            |> Maybe.withDefault [ Html.text "—" ]
                 in
                 [ Html.button
                     [ spanColumns
@@ -1007,6 +1013,7 @@ viewPalette { selected } colorSpace palette =
                 , Html.div
                     [ spanColumns
                     , Html.Attributes.style "display" "grid"
+                    , Theme.gap
                     , Html.Attributes.style "grid-template-columns" "auto auto auto auto"
                     ]
                     (List.map
@@ -1017,8 +1024,10 @@ viewPalette { selected } colorSpace palette =
                         ++ List.concatMap componentInfo [ oklchComponents.l, oklchComponents.c, oklchComponents.h ]
                     )
                 , Html.div
-                    [ spanColumns ]
-                    (Html.text "Min Δ in Lab: " :: minDelta)
+                    [ spanColumns
+                    , Html.Attributes.style "text-align" "center"
+                    ]
+                    minDeltas
                 ]
 
             else
@@ -1048,6 +1057,93 @@ viewPalette { selected } colorSpace palette =
     in
     Theme.box attrs
         (header ++ children)
+
+
+toITP : Oklch -> { i : Float, t : Float, p : Float }
+toITP oklch =
+    let
+        linearRGB : LinearRGB
+        linearRGB =
+            oklch
+                |> Oklch.toOklab
+                |> Oklab.toLinearRGB
+
+        l : Float
+        l =
+            (1688 * linearRGB.linearRed + 2146 * linearRGB.linearGreen + 262 * linearRGB.linearBlue) / 4096
+
+        m : Float
+        m =
+            (683 * linearRGB.linearRed + 2951 * linearRGB.linearGreen + 462 * linearRGB.linearBlue) / 4096
+
+        s : Float
+        s =
+            (99 * linearRGB.linearRed + 309 * linearRGB.linearGreen + 3688 * linearRGB.linearBlue) / 4096
+
+        l_ : Float
+        l_ =
+            eotfInversePQ l
+
+        m_ : Float
+        m_ =
+            eotfInversePQ m
+
+        s_ : Float
+        s_ =
+            eotfInversePQ s
+
+        eotfInversePQ : Float -> Float
+        eotfInversePQ fd =
+            let
+                m1 : Float
+                m1 =
+                    1305 / 8192
+
+                m2 : Float
+                m2 =
+                    2523 / 32
+
+                c1 : Float
+                c1 =
+                    107 / 128
+
+                c2 : Float
+                c2 =
+                    2413 / 128
+
+                c3 : Float
+                c3 =
+                    2392 / 128
+
+                y : Float
+                y =
+                    fd / 10000
+
+                yTom1 : Float
+                yTom1 =
+                    y ^ m1
+            in
+            ((c1 + c2 * yTom1)
+                / (1 + c3 * yTom1)
+            )
+                ^ m2
+
+        i : Float
+        i =
+            (2048 * l_ + 2048 * m_) / 4096
+
+        c_t : Float
+        c_t =
+            (6610 * l_ - 13613 * m_ + 7003 * s_) / 4096
+
+        c_p : Float
+        c_p =
+            (17933 * l_ - 17390 * m_ - 543 * s_) / 4096
+    in
+    { i = i
+    , t = 0.5 * c_t
+    , p = c_p
+    }
 
 
 type GridAxis
