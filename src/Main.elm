@@ -1092,16 +1092,16 @@ toITP oklch =
         s =
             (99 * linearRGB.linearRed + 309 * linearRGB.linearGreen + 3688 * linearRGB.linearBlue) / 4096
 
-        l_ : Float
-        l_ =
+        lPrime : Float
+        lPrime =
             eotfInversePQ l
 
-        m_ : Float
-        m_ =
+        mPrime : Float
+        mPrime =
             eotfInversePQ m
 
-        s_ : Float
-        s_ =
+        sPrime : Float
+        sPrime =
             eotfInversePQ s
 
         eotfInversePQ : Float -> Float
@@ -1142,19 +1142,19 @@ toITP oklch =
 
         i : Float
         i =
-            (2048 * l_ + 2048 * m_) / 4096
+            (2048 * lPrime + 2048 * mPrime) / 4096
 
-        c_t : Float
-        c_t =
-            (6610 * l_ - 13613 * m_ + 7003 * s_) / 4096
+        cT : Float
+        cT =
+            (6610 * lPrime - 13613 * mPrime + 7003 * sPrime) / 4096
 
-        c_p : Float
-        c_p =
-            (17933 * l_ - 17390 * m_ - 543 * s_) / 4096
+        cP : Float
+        cP =
+            (17933 * lPrime - 17390 * mPrime - 543 * sPrime) / 4096
     in
     { i = i
-    , t = 0.5 * c_t
-    , p = c_p
+    , t = 0.5 * cT
+    , p = cP
     }
 
 
