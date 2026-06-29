@@ -90,7 +90,7 @@ greedyPalette n (( h, t ) as acc) =
 
 
 greedyPaletteHelp : Int -> Int -> Int -> Maybe Oklab -> Float -> ( Oklab, List Oklab ) -> Maybe Oklab
-greedyPaletteHelp r g b best bestDistance (( h, t ) as acc) =
+greedyPaletteHelp r g b best bestDistanceSquared (( h, t ) as acc) =
     let
         step : number
         step =
@@ -101,39 +101,39 @@ greedyPaletteHelp r g b best bestDistance (( h, t ) as acc) =
             Color.rgb255 r g b
                 |> Oklab.fromColor
 
-        distance : Oklab -> Float
-        distance p =
-            sqrt
-                ((0.1 * (candidate.lightness - p.lightness))
-                    ^ 2
-                    + (candidate.a - p.a)
-                    ^ 2
-                    + (candidate.b - p.b)
-                    ^ 2
-                )
+        distanceSquared : Oklab -> Float
+        distanceSquared p =
+            oklabDistanceSquared candidate p
 
-        minDistance : Float
-        minDistance =
-            List.foldl (\e a -> min a (distance e)) (distance h) t
+        minDistanceSquared : Float
+        minDistanceSquared =
+            List.foldl (\e a -> min a (distanceSquared e)) (distanceSquared h) t
 
-        ( nextBest, nextBestDistance ) =
-            if minDistance > bestDistance then
-                ( Just candidate, minDistance )
+        ( nextBest, nextBestDistanceSquared ) =
+            if minDistanceSquared > bestDistanceSquared then
+                ( Just candidate, minDistanceSquared )
 
             else
-                ( best, bestDistance )
+                ( best, bestDistanceSquared )
     in
     if (b + step) < 256 then
-        greedyPaletteHelp r g (b + step) nextBest nextBestDistance acc
+        greedyPaletteHelp r g (b + step) nextBest nextBestDistanceSquared acc
 
     else if (g + step) < 256 then
-        greedyPaletteHelp r (g + step) 0 nextBest nextBestDistance acc
+        greedyPaletteHelp r (g + step) 0 nextBest nextBestDistanceSquared acc
 
     else if (r + step) < 256 then
-        greedyPaletteHelp (r + step) 0 0 nextBest nextBestDistance acc
+        greedyPaletteHelp (r + step) 0 0 nextBest nextBestDistanceSquared acc
 
     else
         best
+
+
+oklabDistanceSquared : Oklab -> Oklab -> Float
+oklabDistanceSquared candidate p =
+    ((candidate.lightness - p.lightness) ^ 2)
+        + ((candidate.a - p.a) ^ 2)
+        + ((candidate.b - p.b) ^ 2)
 
 
 uniformPalette : List Oklch
