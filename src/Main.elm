@@ -986,28 +986,44 @@ viewPalette model { selected } colorSpace palette =
 
                     minDeltas : List (Html Msg)
                     minDeltas =
-                        palette
-                            |> List.map (\c -> ( c, toITP c ))
-                            |> List.Extra.uniquePairs
-                            |> List.map
-                                (\( ( ca, itpA ), ( cb, itpB ) ) ->
-                                    ( 720
-                                        * sqrt
-                                            (((itpA.i - itpB.i) ^ 2)
-                                                + ((itpA.t - itpB.t) ^ 2)
-                                                + ((itpA.p - itpB.p) ^ 2)
+                        let
+                            deltas : List ( Float, Oklch, Oklch )
+                            deltas =
+                                palette
+                                    |> List.map (\c -> ( c, toITP c ))
+                                    |> List.Extra.uniquePairs
+                                    |> List.map
+                                        (\( ( ca, itpA ), ( cb, itpB ) ) ->
+                                            let
+                                                deltaITP : Float
+                                                deltaITP =
+                                                    sqrt
+                                                        (((itpA.i - itpB.i) ^ 2)
+                                                            + ((itpA.t - itpB.t) ^ 2)
+                                                            + ((itpA.p - itpB.p) ^ 2)
+                                                        )
+                                            in
+                                            ( 720 * deltaITP
+                                              -- ( distanceOklchPlus ca cb
+                                            , ca
+                                            , cb
                                             )
-                                    , ca
-                                    , cb
-                                    )
-                                )
-                            |> List.sortBy Triple.Extra.first
-                            |> List.take 3
+                                        )
+                                    |> List.sortBy Triple.Extra.first
+
+                            darkest : List ( Float, Oklch, Oklch )
+                            darkest =
+                                deltas
+                                    |> List.sortBy (\( _, ca, cb ) -> ca.lightness + cb.lightness)
+                        in
+                        (List.take 3 deltas ++ List.take 3 darkest)
                             |> List.map
                                 (\( delta, ca, cb ) ->
                                     Html.div []
                                         [ Html.text "ΔE"
                                         , Html.sub [] [ Html.text "ITP" ]
+
+                                        -- , Html.sub [] [ Html.text "Oklch+" ]
                                         , Html.text "( "
                                         , colorDiv model ca
                                         , Html.text " , "
@@ -1069,6 +1085,57 @@ viewPalette model { selected } colorSpace palette =
     in
     Theme.box attrs
         (header ++ children)
+
+
+distanceOklchPlus : Oklch -> Oklch -> Float
+distanceOklchPlus ca cb =
+    let
+        oklabPlusA : { aPrime : Float, bPrime : Float, lPrime : Float }
+        oklabPlusA =
+            oklabPlus ca
+
+        oklabPlusB : { aPrime : Float, bPrime : Float, lPrime : Float }
+        oklabPlusB =
+            oklabPlus cb
+
+        deltaLPrime : Float
+        deltaLPrime =
+            oklabPlusA.lPrime - oklabPlusB.lPrime
+
+        deltaAPrime : Float
+        deltaAPrime =
+            oklabPlusA.aPrime - oklabPlusB.aPrime
+
+        deltaBPrime : Float
+        deltaBPrime =
+            oklabPlusA.bPrime - oklabPlusB.bPrime
+    in
+    sqrt (deltaLPrime ^ 2 + deltaAPrime ^ 2 + deltaBPrime ^ 2)
+
+
+oklabPlus : Oklch -> { aPrime : Float, bPrime : Float, lPrime : Float }
+oklabPlus oklch =
+    let
+        lPrime : Float
+        lPrime =
+            oklch.lightness ^ 0.73
+
+        cPow : Float
+        cPow =
+            oklch.chroma ^ 0.87
+
+        cPrime : Float
+        cPrime =
+            cPow / (cPow + 0.34 ^ 0.87)
+
+        hPrime : Float
+        hPrime =
+            oklch.hue
+    in
+    { aPrime = cPrime * cos hPrime
+    , bPrime = cPrime * sin hPrime
+    , lPrime = lPrime
+    }
 
 
 toITP : Oklch -> { i : Float, t : Float, p : Float }
