@@ -952,8 +952,9 @@ viewPalette model { selected } colorSpace palette =
                                     |> List.Extra.uniquePairs
                                     |> List.map
                                         (\( ca, cb ) ->
-                                            ( Color.Extra.distanceOklchPlus ca cb
-                                              -- ( Color.Extra.distanceITP ca cb
+                                            -- ( Color.Extra.distanceOklchPlus ca cb
+                                            -- ( Color.Extra.distanceITP ca cb
+                                            ( Color.Extra.distanceCiede2000 ca cb
                                             , ca
                                             , cb
                                             )
@@ -974,7 +975,8 @@ viewPalette model { selected } colorSpace palette =
                                         [ Html.text "ΔE"
 
                                         -- , Html.sub [] [ Html.text "ITP" ]
-                                        , Html.sub [] [ Html.text "Oklch+" ]
+                                        -- , Html.sub [] [ Html.text "Oklch+" ]
+                                        , Html.sub [] [ Html.text "CIEDE2000" ]
                                         , Html.text "( "
                                         , colorDiv model ca
                                         , Html.text " , "
